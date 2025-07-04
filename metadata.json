@@ -1,0 +1,6 @@
+{
+  "name": "Webfleet Cold Chain Monitor",
+  "description": "An application for monitoring the temperature, door status, and location of transport vehicles and assets using the Webfleet.connect API. It provides real-time dashboard views and historical data analysis.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
