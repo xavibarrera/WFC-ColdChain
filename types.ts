@@ -28,4 +28,9 @@ export interface HistoricalDataPoint {
   timestamp: number;
   temperature: number | null;
   doorStatus: 0 | 1; // 0 for closed, 1 for open
+  location: {
+    lat: number;
+    lng: number;
+    address: string;
+  } | null;
 }

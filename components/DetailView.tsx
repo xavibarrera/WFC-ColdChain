@@ -40,13 +40,13 @@ const RangeSelector: React.FC<{
 }> = React.memo(({ selectedRange, onRangeChange }) => {
     return (
         <div className="flex items-center gap-2">
-            <label htmlFor="range-pattern" className="text-sm font-medium text-gray-600 dark:text-gray-300">Date Range:</label>
+            <label htmlFor="range-pattern" className="text-sm font-medium text-gray-600">Date Range:</label>
             <select
                 id="range-pattern"
                 name="rangePattern"
                 value={selectedRange}
                 onChange={onRangeChange}
-                className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-500 rounded-md py-2 px-3 text-sm text-gray-900 dark:text-white focus:ring-red-500 focus:border-red-500"
+                className="bg-white border border-gray-300 rounded-md py-2 px-3 text-sm text-gray-900 focus:ring-red-500 focus:border-red-500"
                 aria-label="Select Date Range"
             >
                 {rangeOptions.map(option => (
@@ -94,7 +94,7 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
         doc.text(`Date Range: ${rangeLabel}`, 14, 38);
         
         const canvas = await html2canvas(graphElement, { 
-            backgroundColor: document.documentElement.classList.contains('dark') ? '#1f2937' : '#ffffff' 
+            backgroundColor: '#ffffff' 
         });
         const imgData = canvas.toDataURL('image/png');
         const imgProps = doc.getImageProperties(imgData);
@@ -104,11 +104,12 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
         doc.addImage(imgData, 'PNG', 14, 48, imgWidth, imgHeight);
 
         if (data.length > 0) {
-            const tableColumn = ["Timestamp", "Temperature (°C)", "Door Status"];
+            const tableColumn = ["Timestamp", "Temperature (°C)", "Door Status", "Location"];
             const tableRows = data.map(item => [
                 new Date(item.timestamp).toLocaleString(),
                 item.temperature !== null ? item.temperature.toFixed(1) : 'N/A',
                 item.doorStatus === 1 ? 'Open' : 'Closed',
+                item.location ? item.location.address : 'N/A',
             ]);
 
             doc.autoTable({
@@ -151,31 +152,78 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
   return (
     <div className="p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
-        <button onClick={onBack} className="mb-4 text-sm text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition-colors">
-          &larr; Back to Dashboard
+        <button 
+          onClick={onBack} 
+          className="mb-4 inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+        >
+          <span className="material-icons" style={{ fontSize: '20px' }}>arrow_back</span>
+          Back to Dashboard
         </button>
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+        <div className="bg-white rounded-lg shadow-lg p-6">
           <div className="flex justify-between items-start mb-6 flex-wrap gap-4">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{vehicle.name}</h2>
-              <p className="text-gray-500 dark:text-gray-400">{vehicle.type} - {vehicle.uid}</p>
+              <h2 className="text-2xl font-bold text-gray-900">{vehicle.name}</h2>
+              <p className="text-gray-500">{vehicle.type} - {vehicle.uid}</p>
             </div>
              <div className="flex items-center gap-4">
                 <RangeSelector selectedRange={rangePattern} onRangeChange={handleRangeChange} />
                 <button
                     onClick={handleDownloadPdf}
                     disabled={isDownloading || isLoading || data.length === 0}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                 >
                     {isDownloading ? <PdfSpinner/> : <IconDownload className="h-5 w-5" />}
                     {isDownloading ? 'Generating...' : 'Download PDF'}
                 </button>
             </div>
           </div>
-           {error && <p className="text-red-500 text-center mb-4 bg-red-100 dark:bg-red-900/20 p-3 rounded-md">{error}</p>}
+           {error && <p className="text-red-500 text-center mb-4 bg-red-100 p-3 rounded-md">{error}</p>}
           <div id="datagraph-container" className="h-96">
             {isLoading ? <Spinner /> : <DataGraph data={data} />}
           </div>
+          {data.length > 0 && !isLoading && (
+            <div className="mt-8">
+              <h3 className="text-xl font-bold text-gray-900 mb-4">Historical Data Log</h3>
+              <div className="overflow-auto max-h-96 relative border border-gray-200 rounded-lg">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-100 sticky top-0 z-10">
+                    <tr>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Timestamp
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Temperature
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Door Status
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Location
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {data.map((point, index) => (
+                      <tr key={`${point.timestamp}-${index}`}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {new Date(point.timestamp).toLocaleString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {point.temperature !== null ? `${point.temperature.toFixed(1)}°C` : 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {point.doorStatus === 1 ? 'Open' : 'Closed'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {point.location ? point.location.address : 'N/A'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

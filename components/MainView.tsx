@@ -58,7 +58,7 @@ const MainView: React.FC<MainViewProps> = ({ auth, onSelectVehicle }) => {
 
   if (isLoading) {
     return (
-        <div className="p-8 h-[calc(100vh-80px)]">
+        <div className="p-8 h-full">
             <Spinner />
         </div>
     );
@@ -69,16 +69,21 @@ const MainView: React.FC<MainViewProps> = ({ auth, onSelectVehicle }) => {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row h-[calc(100vh-80px)] p-4 gap-4">
-      <div className="lg:w-1/2 w-full h-1/2 lg:h-full overflow-hidden bg-white dark:bg-gray-800 rounded-lg shadow-lg">
-        <VehicleTable 
-          vehicles={vehicles} 
-          onRowClick={handleRowClick}
-          selectedVehicleId={selectedVehicleId}
-          onVehicleHover={setSelectedVehicleId}
-        />
+    <div className="flex-grow flex flex-col md:flex-row overflow-hidden">
+      <div className="w-full md:w-2/5 flex flex-col bg-white h-1/2 md:h-full">
+        <div className="p-4 border-b">
+          <h2 className="text-lg font-bold">Vehicles</h2>
+        </div>
+        <div className="flex-grow overflow-y-auto">
+          <VehicleTable 
+            vehicles={vehicles} 
+            onRowClick={handleRowClick}
+            selectedVehicleId={selectedVehicleId}
+            onVehicleHover={setSelectedVehicleId}
+          />
+        </div>
       </div>
-      <div className="lg:w-1/2 w-full h-1/2 lg:h-full bg-white dark:bg-gray-800 rounded-lg shadow-lg">
+      <div className="w-full md:w-3/5 h-1/2 md:h-full">
         <VehicleMap 
           vehicles={vehicles} 
           onMarkerClick={handleMarkerClick}

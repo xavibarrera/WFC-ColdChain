@@ -1,7 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { AuthCredentials } from '../types';
 import WebfleetService from '../services/webfleetService';
-import { IconWebfleet } from '../constants';
 
 interface LoginPageProps {
   onLogin: (credentials: AuthCredentials) => void;
@@ -42,16 +41,13 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   }, [apiKey, accountName, username, password, onLogin]);
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
-      <div className="w-full max-w-md p-8 space-y-8 bg-white rounded-2xl shadow-lg dark:bg-gray-800">
+    <div className="flex items-center justify-center min-h-screen bg-gray-100">
+      <div className="w-full max-w-lg p-10 space-y-8 bg-white rounded-2xl shadow-lg">
         <div className="text-center">
-            <div className="flex justify-center mx-auto mb-4">
-                 <IconWebfleet className="h-10 w-auto text-gray-900 dark:text-white" />
-            </div>
-            <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white">
-                Webfleet.connect
+            <h1 className="text-3xl font-bold text-gray-900">
+                WEBFLEET COLD CHAIN
             </h1>
-            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Cold Chain Monitoring</p>
+            <p className="mt-2 text-sm text-gray-600">Sign in to monitor your assets.</p>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="rounded-md shadow-sm -space-y-px">
@@ -63,7 +59,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 required 
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 rounded-t-md focus:outline-none focus:ring-red-500 focus:border-red-500 focus:z-10 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white" 
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 rounded-t-md focus:outline-none focus:ring-red-500 focus:border-red-500 focus:z-10 sm:text-sm" 
                 placeholder="API Key" 
               />
             </div>
@@ -75,7 +71,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                 value={accountName}
                 onChange={(e) => setAccountName(e.target.value)}
                 required 
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 focus:outline-none focus:ring-red-500 focus:border-red-500 focus:z-10 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white" 
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 focus:outline-none focus:ring-red-500 focus:border-red-500 focus:z-10 sm:text-sm" 
                 placeholder="Account Name" 
               />
             </div>
@@ -88,7 +84,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                 onChange={(e) => setUsername(e.target.value)}
                 autoComplete="username" 
                 required 
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 focus:outline-none focus:ring-red-500 focus:border-red-500 focus:z-10 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white" 
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 focus:outline-none focus:ring-red-500 focus:border-red-500 focus:z-10 sm:text-sm" 
                 placeholder="Username" 
               />
             </div>
@@ -101,7 +97,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password" 
                 required 
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 rounded-b-md focus:outline-none focus:ring-red-500 focus:border-red-500 focus:z-10 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white" 
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 rounded-b-md focus:outline-none focus:ring-red-500 focus:border-red-500 focus:z-10 sm:text-sm" 
                 placeholder="Password" 
               />
             </div>

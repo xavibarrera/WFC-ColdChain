@@ -20,11 +20,24 @@ interface DataGraphProps {
 const CustomTooltip: React.FC<any> = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       const date = new Date(label).toLocaleString();
+      const tempData = payload.find(p => p.dataKey === 'temperature');
+      const doorData = payload.find(p => p.dataKey === 'doorStatus');
+
       return (
-        <div className="bg-white dark:bg-gray-700 p-2 border border-gray-200 dark:border-gray-600 rounded shadow-lg">
-          <p className="label text-sm text-gray-600 dark:text-gray-300">{`${date}`}</p>
-          <p className="intro text-blue-500">{`Temp: ${payload[0].value}°C`}</p>
-          <p className="intro text-red-500">{`Door: ${payload[1].value === 1 ? 'Open' : 'Closed'}`}</p>
+        <div className="bg-white p-2 border border-gray-200 rounded shadow-lg">
+          <p className="label text-sm text-gray-600">{`${date}`}</p>
+          <p className="intro text-blue-500">
+            {'Temp: '}
+            {tempData && typeof tempData.value === 'number'
+              ? `${tempData.value.toFixed(1)}°C`
+              : 'N/A'}
+          </p>
+          <p className="intro text-red-500">
+            {'Door: '}
+            {doorData && typeof doorData.value === 'number'
+              ? (doorData.value === 1 ? 'Open' : 'Closed')
+              : 'N/A'}
+          </p>
         </div>
       );
     }
@@ -59,7 +72,7 @@ const DataGraph: React.FC<DataGraphProps> = ({ data }) => {
         <YAxis yAxisId="right" orientation="right" tick={false} stroke="#82ca9d" />
         <Tooltip content={<CustomTooltip />} />
         <Legend />
-        <Line yAxisId="left" type="monotone" dataKey="temperature" stroke="#8884d8" dot={false} name="Temperature" />
+        <Line yAxisId="left" type="monotone" dataKey="temperature" stroke="#8884d8" dot={false} name="Temperature" connectNulls />
         <Area yAxisId="right" type="step" dataKey="doorStatus" fill="#ef4444" stroke="#ef4444" fillOpacity={0.2} name="Door Open" />
       </ComposedChart>
     </ResponsiveContainer>

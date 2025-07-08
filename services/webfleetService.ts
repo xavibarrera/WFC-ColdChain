@@ -1,3 +1,4 @@
+
 import { AuthCredentials, Vehicle, DoorStatus, HistoricalDataPoint } from '../types';
 
 const API_BASE_URL = 'https://csv.webfleet.com/extern';
@@ -125,12 +126,13 @@ class WebfleetService {
             range_pattern: rangePattern,
         };
 
-        const [tempData, doorData] = await Promise.all([
+        const [tempData, doorData, trackData] = await Promise.all([
             this.apiRequest('getHistoricalTemperatureData', params, auth).catch(() => []),
-            this.apiRequest('getHistoricalRefrigeratedDoorStatusData', params, auth).catch(() => [])
+            this.apiRequest('getHistoricalRefrigeratedDoorStatusData', params, auth).catch(() => []),
+            this.apiRequest('showTrack', params, auth).catch(() => [])
         ]);
 
-        const events: ({ timestamp: number } & ({ temperature: number } | { doorStatus: DoorStatus }))[] = [];
+        const events: ({ timestamp: number } & ({ temperature: number } | { doorStatus: DoorStatus } | { location: { lat: number; lng: number; address: string; } }))[] = [];
 
         if (Array.isArray(tempData)) {
             tempData.forEach((d: any) => {
@@ -148,6 +150,22 @@ class WebfleetService {
                 }
             });
         }
+
+        if (Array.isArray(trackData)) {
+            trackData.forEach((d: any) => {
+                const ts = d.recordtime ? new Date(d.recordtime).getTime() : null; // showTrack uses 'recordtime'
+                if (ts && !isNaN(ts) && typeof d.latitude_mdeg === 'number' && typeof d.longitude_mdeg === 'number') {
+                     events.push({
+                        timestamp: ts,
+                        location: {
+                            lat: d.latitude_mdeg / 1000000,
+                            lng: d.longitude_mdeg / 1000000,
+                            address: d.postext || 'Address not available',
+                        }
+                    });
+                }
+            });
+        }
         
         if (events.length === 0) return [];
 
@@ -156,6 +174,8 @@ class WebfleetService {
         const results: HistoricalDataPoint[] = [];
         let lastTemp: number | null = null;
         let lastDoor: DoorStatus | null = null;
+        let lastLocation: { lat: number, lng: number, address: string } | null = null;
+
 
         for (const event of events) {
             if (results.length > 0) {
@@ -165,6 +185,7 @@ class WebfleetService {
                         timestamp: event.timestamp - 1,
                         temperature: lastTemp,
                         doorStatus: lastDoor === DoorStatus.OPEN ? 1 : 0,
+                        location: lastLocation,
                     });
                 }
             }
@@ -175,18 +196,23 @@ class WebfleetService {
             if ('doorStatus' in event) {
                 lastDoor = event.doorStatus;
             }
+            if ('location' in event) {
+                lastLocation = event.location;
+            }
 
             if (results.length > 0 && results[results.length - 1].timestamp === event.timestamp) {
                 results[results.length - 1] = {
                     timestamp: event.timestamp,
                     temperature: lastTemp,
                     doorStatus: lastDoor === DoorStatus.OPEN ? 1 : 0,
+                    location: lastLocation,
                 };
             } else {
                 results.push({
                     timestamp: event.timestamp,
                     temperature: lastTemp,
                     doorStatus: lastDoor === DoorStatus.OPEN ? 1 : 0,
+                    location: lastLocation,
                 });
             }
         }

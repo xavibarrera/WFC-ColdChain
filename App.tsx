@@ -4,7 +4,6 @@ import { AuthCredentials, Vehicle } from './types';
 import LoginPage from './components/LoginPage';
 import MainView from './components/MainView';
 import DetailView from './components/DetailView';
-import { IconLogo, IconLogout } from './constants';
 import WebfleetService from './services/webfleetService';
 
 type View = 'login' | 'main' | 'detail';
@@ -59,23 +58,24 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-sans">
+    <div className="flex flex-col h-screen bg-gray-100">
       {auth && (
-        <header className="bg-white dark:bg-gray-800 shadow-md p-4 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <IconLogo/>
-            <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Webfleet Cold Chain</h1>
+        <header className="bg-black text-white shadow-md">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-20">
+              <h1 className="text-2xl font-bold">WEBFLEET COLD CHAIN</h1>
+              <button
+                onClick={handleLogout}
+                className="flex items-center text-white hover:text-red-500 transition-colors duration-300"
+              >
+                <span className="material-icons mr-2">logout</span>
+                Logout
+              </button>
+            </div>
           </div>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 hover:text-red-500 dark:hover:text-red-400 transition-colors"
-          >
-            <IconLogout className="h-5 w-5" />
-            Logout
-          </button>
         </header>
       )}
-      <main>
+      <main className="flex-grow flex flex-col min-h-0">
         {renderContent()}
       </main>
     </div>
