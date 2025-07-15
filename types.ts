@@ -27,7 +27,7 @@ export interface Vehicle {
 export interface HistoricalDataPoint {
   timestamp: number;
   temperature: number | null;
-  doorStatus: 0 | 1; // 0 for closed, 1 for open
+  doorStatus: 0 | 1 | null; // 0 for closed, 1 for open, null for unknown
   location: {
     lat: number;
     lng: number;

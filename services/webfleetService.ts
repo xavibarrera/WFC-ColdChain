@@ -41,10 +41,10 @@ class WebfleetService {
         const responseText = await response.text();
 
         if (!response.ok) {
-             const errMessage = response.headers.get('X-Webfleet-Errormessage') || responseText;
-             if (response.status === 401) {
-                 throw new Error('Authentication failed. Please check your username and password.');
+            if (response.status === 401) {
+                throw new Error('Authentication failed. Please check your username and password.');
             }
+            const errMessage = response.headers.get('X-Webfleet-Errormessage') || responseText;
             throw new Error(`API Error: ${errMessage} (Status: ${response.status})`);
         }
 
@@ -127,10 +127,17 @@ class WebfleetService {
         };
 
         const [tempData, doorData, trackData] = await Promise.all([
-            this.apiRequest('getHistoricalTemperatureData', params, auth).catch(() => []),
-            this.apiRequest('getHistoricalRefrigeratedDoorStatusData', params, auth).catch(() => []),
-            this.apiRequest('showTrack', params, auth).catch(() => [])
+            this.apiRequest('getHistoricalTemperatureData', params, auth).catch((e) => { console.error('[WebfleetService] Error fetching historical temperature data:', e); return []; }),
+            this.apiRequest('getHistoricalRefrigeratedDoorStatusData', params, auth).catch((e) => {
+                console.error(
+                    `[WebfleetService] Could not fetch door status data. The API call 'getHistoricalRefrigeratedDoorStatusData' failed or returned no data. This can happen if the vehicle does not support this feature, or if there were no door events in the selected period. Error: ${e.message}`
+                );
+                return [];
+            }),
+            this.apiRequest('showTrack', params, auth).catch((e) => { console.error('[WebfleetService] Error fetching historical track data:', e); return []; })
         ]);
+
+        console.log('[WebfleetService] Raw door data from API:', doorData);
 
         const events: ({ timestamp: number } & ({ temperature: number } | { doorStatus: DoorStatus } | { location: { lat: number; lng: number; address: string; } }))[] = [];
 
@@ -143,12 +150,16 @@ class WebfleetService {
             });
         }
         if (Array.isArray(doorData)) {
+            const processedDoorEvents: any[] = [];
             doorData.forEach((d: any) => {
                 const ts = d.timestamp ? new Date(d.timestamp).getTime() : null;
                 if (ts && !isNaN(ts)) {
-                    events.push({ timestamp: ts, doorStatus: d.status === 'OPEN' ? DoorStatus.OPEN : DoorStatus.CLOSED });
+                    const doorEvent = { timestamp: ts, doorStatus: d.status === 'OPEN' ? DoorStatus.OPEN : DoorStatus.CLOSED };
+                    events.push(doorEvent);
+                    processedDoorEvents.push(doorEvent);
                 }
             });
+            console.log('[WebfleetService] Processed door events:', processedDoorEvents);
         }
 
         if (Array.isArray(trackData)) {
@@ -176,6 +187,10 @@ class WebfleetService {
         let lastDoor: DoorStatus | null = null;
         let lastLocation: { lat: number, lng: number, address: string } | null = null;
 
+        const getDoorStatus = (status: DoorStatus | null): 0 | 1 | null => {
+            if (status === null) return null;
+            return status === DoorStatus.OPEN ? 1 : 0;
+        };
 
         for (const event of events) {
             if (results.length > 0) {
@@ -184,7 +199,7 @@ class WebfleetService {
                     results.push({
                         timestamp: event.timestamp - 1,
                         temperature: lastTemp,
-                        doorStatus: lastDoor === DoorStatus.OPEN ? 1 : 0,
+                        doorStatus: getDoorStatus(lastDoor),
                         location: lastLocation,
                     });
                 }
@@ -200,23 +215,21 @@ class WebfleetService {
                 lastLocation = event.location;
             }
 
+            const currentPoint: HistoricalDataPoint = {
+                timestamp: event.timestamp,
+                temperature: lastTemp,
+                doorStatus: getDoorStatus(lastDoor),
+                location: lastLocation,
+            };
+
             if (results.length > 0 && results[results.length - 1].timestamp === event.timestamp) {
-                results[results.length - 1] = {
-                    timestamp: event.timestamp,
-                    temperature: lastTemp,
-                    doorStatus: lastDoor === DoorStatus.OPEN ? 1 : 0,
-                    location: lastLocation,
-                };
+                results[results.length - 1] = currentPoint;
             } else {
-                results.push({
-                    timestamp: event.timestamp,
-                    temperature: lastTemp,
-                    doorStatus: lastDoor === DoorStatus.OPEN ? 1 : 0,
-                    location: lastLocation,
-                });
+                results.push(currentPoint);
             }
         }
         
+        console.log(`[WebfleetService] Found ${results.length} total historical data points for object ${objectuid}.`);
         return results;
     }
 }
