@@ -29,8 +29,12 @@ const MainView: React.FC<MainViewProps> = ({ auth, onSelectVehicle }) => {
       setIsLoading(true);
       setError(null);
       const data = await WebfleetService.getVehiclesAndAssets(auth);
-      setVehicles(data);
-      const firstVehicleWithLocation = data.find(v => v.location);
+      const vehiclesWithSensors = data.filter(v => 
+        (v.temperatures && Object.keys(v.temperatures).length > 0) || v.doorStatus !== null
+      );
+      vehiclesWithSensors.sort((a, b) => a.name.localeCompare(b.name));
+      setVehicles(vehiclesWithSensors);
+      const firstVehicleWithLocation = vehiclesWithSensors.find(v => v.location);
       if (firstVehicleWithLocation?.location) {
         setMapCenter([firstVehicleWithLocation.location.lat, firstVehicleWithLocation.location.lng]);
       }

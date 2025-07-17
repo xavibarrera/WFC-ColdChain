@@ -1,5 +1,5 @@
 
-import { AuthCredentials, Vehicle, DoorStatus, HistoricalDataPoint } from '../types';
+import { AuthCredentials, Vehicle, DoorStatus, HistoricalDataPoint, TemperatureReading } from '../types';
 
 const API_BASE_URL = 'https://csv.webfleet.com/extern';
 
@@ -85,14 +85,88 @@ class WebfleetService {
             return [];
         }
 
-        const tempMap = new Map<string, number>();
+        const tempMap = new Map<string, { [id: number]: TemperatureReading }>();
         if (Array.isArray(tempData)) {
-            tempData.forEach(item => item.objectuid && tempMap.set(item.objectuid, item.temperature));
+            const readingsByUid = new Map<string, any[]>();
+            tempData.forEach(item => {
+                if (item.objectuid && typeof item.temperature === 'number') {
+                    if (!readingsByUid.has(item.objectuid)) {
+                        readingsByUid.set(item.objectuid, []);
+                    }
+                    readingsByUid.get(item.objectuid)!.push(item);
+                }
+            });
+    
+            readingsByUid.forEach((readings, uid) => {
+                const vehicleTemps: { [id: number]: TemperatureReading } = {};
+                const usedSensorIds = new Set<number>();
+                
+                readings.forEach(item => {
+                    if (item.sensor) {
+                        vehicleTemps[item.sensor] = {
+                            value: item.temperature,
+                            name: item.sensorname || `Sensor ${item.sensor}`
+                        };
+                        usedSensorIds.add(item.sensor);
+                    }
+                });
+    
+                let nextSensorId = 1;
+                readings.forEach(item => {
+                    if (!item.sensor) {
+                        while (usedSensorIds.has(nextSensorId)) {
+                            nextSensorId++;
+                        }
+                        vehicleTemps[nextSensorId] = {
+                            value: item.temperature,
+                            name: item.sensorname || `Sensor ${nextSensorId}`
+                        };
+                        usedSensorIds.add(nextSensorId);
+                    }
+                });
+                
+                tempMap.set(uid, vehicleTemps);
+            });
         }
 
-        const doorMap = new Map<string, DoorStatus>();
+        const doorMap = new Map<string, { [id: number]: DoorStatus }>();
         if (Array.isArray(doorData)) {
-            doorData.forEach(item => item.objectuid && doorMap.set(item.objectuid, item.status === 'OPEN' ? DoorStatus.OPEN : DoorStatus.CLOSED));
+            const doorReadingsByUid = new Map<string, any[]>();
+            doorData.forEach(item => {
+                if (item.objectuid && item.status) {
+                    if (!doorReadingsByUid.has(item.objectuid)) {
+                        doorReadingsByUid.set(item.objectuid, []);
+                    }
+                    doorReadingsByUid.get(item.objectuid)!.push(item);
+                }
+            });
+    
+            doorReadingsByUid.forEach((readings, uid) => {
+                const vehicleDoors: { [id: number]: DoorStatus } = {};
+                const usedSensorIds = new Set<number>();
+                
+                readings.forEach(item => {
+                    if (item.sensor) {
+                        vehicleDoors[item.sensor] = item.status === 'OPEN' ? DoorStatus.OPEN : DoorStatus.CLOSED;
+                        usedSensorIds.add(item.sensor);
+                    }
+                });
+    
+                let nextSensorId = 1;
+                readings.forEach(item => {
+                    if (!item.sensor) {
+                        while (usedSensorIds.has(nextSensorId)) {
+                            nextSensorId++;
+                        }
+                        vehicleDoors[nextSensorId] = item.status === 'OPEN' ? DoorStatus.OPEN : DoorStatus.CLOSED;
+                        usedSensorIds.add(nextSensorId);
+                    }
+                });
+                
+                if (Object.keys(vehicleDoors).length > 0) {
+                    doorMap.set(uid, vehicleDoors);
+                }
+            });
         }
         
         return vehicleData.map((item: any): Vehicle => {
@@ -101,7 +175,7 @@ class WebfleetService {
                 uid: item.objectuid,
                 name: item.objectname,
                 type: item.objectclass === 'asset' ? 'Asset' : 'Vehicle',
-                temperature: tempMap.get(item.objectuid) ?? null,
+                temperatures: tempMap.get(item.objectuid) ?? null,
                 doorStatus: doorMap.get(item.objectuid) ?? null,
                 location: hasLocation
                     ? {
@@ -114,122 +188,214 @@ class WebfleetService {
         });
     }
 
+    private static assignStableIds(data: any[], valueKey: 'temperature' | 'status'): any[] {
+        if (!Array.isArray(data) || data.length === 0) {
+            return [];
+        }
+    
+        const readingsByTs = new Map<number, any[]>();
+        const explicitIds = new Set<number>();
+    
+        // First pass: Group by timestamp and find all explicit IDs
+        data.forEach(d => {
+            const ts = d.timestamp ? new Date(d.timestamp).getTime() : null;
+            if (ts && !isNaN(ts) && (d[valueKey] !== undefined)) {
+                if (!readingsByTs.has(ts)) readingsByTs.set(ts, []);
+                readingsByTs.get(ts)!.push(d);
+                if (d.sensor) {
+                    explicitIds.add(d.sensor);
+                }
+            }
+        });
+        
+        // Find the maximum number of anonymous sensors at any single point in time
+        let maxAnonCount = 0;
+        readingsByTs.forEach(readings => {
+            const anonCount = readings.filter(r => !r.sensor).length;
+            if (anonCount > maxAnonCount) {
+                maxAnonCount = anonCount;
+            }
+        });
+    
+        if (maxAnonCount === 0) {
+            return data; // No changes needed
+        }
+    
+        const maxExplicitId = explicitIds.size > 0 ? Math.max(...Array.from(explicitIds)) : 0;
+        const anonIdPool = Array.from({ length: maxAnonCount }, (_, i) => maxExplicitId + 1 + i);
+    
+        const processedData: any[] = [];
+        readingsByTs.forEach(readings => {
+            const anonReadings = readings.filter(r => !r.sensor);
+            const explicitReadings = readings.filter(r => r.sensor);
+    
+            // Assign stable IDs from the pool to the anonymous readings for this timestamp
+            const updatedAnonReadings = anonReadings.map((reading, index) => ({
+                ...reading,
+                sensor: anonIdPool[index]
+            }));
+            
+            processedData.push(...updatedAnonReadings, ...explicitReadings);
+        });
+    
+        return processedData;
+    }
+
     public static async getHistoricalData(
         auth: AuthCredentials,
         objectuid: string,
         rangePattern: string
     ): Promise<HistoricalDataPoint[]> {
         if (!auth.apiKey) throw new Error("API Key is required to fetch historical data.");
-
+    
         const params = {
             objectuid,
             range_pattern: rangePattern,
         };
-
-        const [tempData, doorData, trackData] = await Promise.all([
-            this.apiRequest('getHistoricalTemperatureData', params, auth).catch((e) => { console.error('[WebfleetService] Error fetching historical temperature data:', e); return []; }),
-            this.apiRequest('getHistoricalRefrigeratedDoorStatusData', params, auth).catch((e) => {
-                console.error(
-                    `[WebfleetService] Could not fetch door status data. The API call 'getHistoricalRefrigeratedDoorStatusData' failed or returned no data. This can happen if the vehicle does not support this feature, or if there were no door events in the selected period. Error: ${e.message}`
-                );
-                return [];
-            }),
-            this.apiRequest('showTrack', params, auth).catch((e) => { console.error('[WebfleetService] Error fetching historical track data:', e); return []; })
+    
+        const [rawTempData, rawDoorData, trackData] = await Promise.all([
+            this.apiRequest('getHistoricalTemperatureData', params, auth).catch(() => []),
+            this.apiRequest('getHistoricalRefrigeratedDoorStatusData', params, auth).catch(() => []),
+            this.apiRequest('showTrack', params, auth).catch(() => [])
         ]);
-
-        console.log('[WebfleetService] Raw door data from API:', doorData);
-
-        const events: ({ timestamp: number } & ({ temperature: number } | { doorStatus: DoorStatus } | { location: { lat: number; lng: number; address: string; } }))[] = [];
-
-        if (Array.isArray(tempData)) {
-            tempData.forEach((d: any) => {
-                const ts = d.timestamp ? new Date(d.timestamp).getTime() : null;
-                if (ts && !isNaN(ts)) {
-                    events.push({ timestamp: ts, temperature: d.temperature });
-                }
-            });
-        }
-        if (Array.isArray(doorData)) {
-            const processedDoorEvents: any[] = [];
-            doorData.forEach((d: any) => {
-                const ts = d.timestamp ? new Date(d.timestamp).getTime() : null;
-                if (ts && !isNaN(ts)) {
-                    const doorEvent = { timestamp: ts, doorStatus: d.status === 'OPEN' ? DoorStatus.OPEN : DoorStatus.CLOSED };
-                    events.push(doorEvent);
-                    processedDoorEvents.push(doorEvent);
-                }
-            });
-            console.log('[WebfleetService] Processed door events:', processedDoorEvents);
-        }
-
-        if (Array.isArray(trackData)) {
-            trackData.forEach((d: any) => {
-                const ts = d.recordtime ? new Date(d.recordtime).getTime() : null; // showTrack uses 'recordtime'
-                if (ts && !isNaN(ts) && typeof d.latitude_mdeg === 'number' && typeof d.longitude_mdeg === 'number') {
-                     events.push({
-                        timestamp: ts,
-                        location: {
-                            lat: d.latitude_mdeg / 1000000,
-                            lng: d.longitude_mdeg / 1000000,
-                            address: d.postext || 'Address not available',
-                        }
-                    });
-                }
-            });
-        }
+    
+        //console.log('[WebfleetService] Raw Historical Temperature Data from API:', JSON.stringify(rawTempData, null, 2));
+        //console.log('[WebfleetService] Raw Historical Door Status Data from API:', JSON.stringify(rawDoorData, null, 2));
+        //console.log('[WebfleetService] Raw Historical Track Data from API:', JSON.stringify(trackData, null, 2));
         
-        if (events.length === 0) return [];
-
-        events.sort((a, b) => a.timestamp - b.timestamp);
-
-        const results: HistoricalDataPoint[] = [];
-        let lastTemp: number | null = null;
-        let lastDoor: DoorStatus | null = null;
-        let lastLocation: { lat: number, lng: number, address: string } | null = null;
-
-        const getDoorStatus = (status: DoorStatus | null): 0 | 1 | null => {
-            if (status === null) return null;
-            return status === DoorStatus.OPEN ? 1 : 0;
+        // Normalize sensor identifier property from 'sensorcode' (hex string) to 'sensor' (number)
+        const normalizeSensorData = (data: any[]) => {
+            if (!Array.isArray(data)) return [];
+            return data.map(d => {
+                // The historical API returns 'sensorcode' (hex), but the app expects 'sensor' (number).
+                if (d.sensorcode && typeof d.sensor === 'undefined') {
+                    const numericId = parseInt(d.sensorcode, 16);
+                    if (!isNaN(numericId)) {
+                        return { ...d, sensor: numericId };
+                    }
+                }
+                return d;
+            });
         };
 
-        for (const event of events) {
-            if (results.length > 0) {
-                const prevTimestamp = results[results.length - 1].timestamp;
-                if (event.timestamp > prevTimestamp + 1) { 
-                    results.push({
-                        timestamp: event.timestamp - 1,
-                        temperature: lastTemp,
-                        doorStatus: getDoorStatus(lastDoor),
-                        location: lastLocation,
-                    });
+        const normalizedTempData = normalizeSensorData(rawTempData);
+        const normalizedDoorData = normalizeSensorData(rawDoorData);
+
+        const tempData = WebfleetService.assignStableIds(normalizedTempData, 'temperature');
+        const doorData = WebfleetService.assignStableIds(normalizedDoorData, 'status');
+
+        const dataByTs = new Map<number, {
+            temperatures?: { [id: number]: TemperatureReading };
+            doorStatus?: { [id: number]: 0 | 1 };
+            location?: { lat: number; lng: number; address: string; };
+        }>();
+    
+        const getOrCreatePoint = (ts: number) => {
+            if (!dataByTs.has(ts)) {
+                dataByTs.set(ts, {});
+            }
+            return dataByTs.get(ts)!;
+        };
+    
+        // Process temperature data
+        if (Array.isArray(tempData)) {
+            tempData.forEach(d => {
+                const ts = new Date(d.timestamp).getTime();
+                if (d.sensor && typeof d.temperature === 'number') {
+                    const point = getOrCreatePoint(ts);
+                    if (!point.temperatures) point.temperatures = {};
+                    point.temperatures[d.sensor] = {
+                        value: d.temperature,
+                        name: d.sensorname || `Sensor ${d.sensor}`
+                    };
                 }
-            }
+            });
+        }
+    
+        // Process door data
+        if (Array.isArray(doorData)) {
+            doorData.forEach(d => {
+                const ts = new Date(d.timestamp).getTime();
+                if (d.sensor && d.status) {
+                    const point = getOrCreatePoint(ts);
+                    if (!point.doorStatus) point.doorStatus = {};
+                    point.doorStatus[d.sensor] = d.status === 'OPEN' ? 1 : 0;
+                }
+            });
+        }
+    
+        if (Array.isArray(trackData)) {
+            trackData.forEach((d: any) => {
+                const ts = d.recordtime ? new Date(d.recordtime).getTime() : null;
+                if (ts && !isNaN(ts) && typeof d.latitude_mdeg === 'number') {
+                    const point = getOrCreatePoint(ts);
+                    point.location = {
+                        lat: d.latitude_mdeg / 1000000,
+                        lng: d.longitude_mdeg / 1000000,
+                        address: d.postext || 'Address not available',
+                    };
+                }
+            });
+        }
+    
+        const sortedTimestamps = Array.from(dataByTs.keys()).sort((a, b) => a - b);
+    
+        if (sortedTimestamps.length === 0) return [];
 
-            if ('temperature' in event) {
-                lastTemp = event.temperature;
-            }
-            if ('doorStatus' in event) {
-                lastDoor = event.doorStatus;
-            }
-            if ('location' in event) {
-                lastLocation = event.location;
-            }
+        const results: HistoricalDataPoint[] = [];
+        let lastDoor: { [id: number]: 0 | 1 } | null = null;
+        let carriedTemps: { [id: number]: TemperatureReading } | null = null;
+        let lastLocation: { lat: number, lng: number, address: string } | null = null;
+        
+        for (const timestamp of sortedTimestamps) {
+            const point = dataByTs.get(timestamp)!;
+            
+            const hasTemp = point.temperatures && Object.keys(point.temperatures).length > 0;
+            const hasDoorData = point.doorStatus && Object.keys(point.doorStatus).length > 0;
+            
+            const combinedDoorStatus = { ...(lastDoor || {}), ...(point.doorStatus || {}) };
+            const doorChanged = JSON.stringify(combinedDoorStatus) !== JSON.stringify(lastDoor);
+            
+            // An event is the first point, a temp reading, or a door status change.
+            if (results.length === 0 || hasTemp || doorChanged) {
+                
+                // Add a synthetic point before a time gap to ensure graph continuity.
+                if (results.length > 0) {
+                    const prevTimestamp = results[results.length - 1].timestamp;
+                    if (timestamp > prevTimestamp + 1) {
+                        results.push({
+                            timestamp: timestamp - 1,
+                            temperatures: carriedTemps,
+                            doorStatus: lastDoor,
+                            location: lastLocation,
+                        });
+                    }
+                }
+                
+                const currentTemps = hasTemp ? { ...(carriedTemps || {}), ...point.temperatures } : carriedTemps;
+                const currentDoor = (hasDoorData || lastDoor) ? combinedDoorStatus : null;
+                const currentLocation = point.location || lastLocation;
 
-            const currentPoint: HistoricalDataPoint = {
-                timestamp: event.timestamp,
-                temperature: lastTemp,
-                doorStatus: getDoorStatus(lastDoor),
-                location: lastLocation,
-            };
+                results.push({
+                    timestamp,
+                    temperatures: currentTemps,
+                    doorStatus: currentDoor,
+                    location: currentLocation,
+                });
+                
+                // Update last known states for the next iteration.
+                lastDoor = currentDoor;
+                carriedTemps = currentTemps;
+                lastLocation = currentLocation;
 
-            if (results.length > 0 && results[results.length - 1].timestamp === event.timestamp) {
-                results[results.length - 1] = currentPoint;
-            } else {
-                results.push(currentPoint);
+            } else if (point.location) {
+                // If not a primary event, just update location.
+                // This attaches the most recent location to the next primary event.
+                lastLocation = point.location;
             }
         }
-        
-        console.log(`[WebfleetService] Found ${results.length} total historical data points for object ${objectuid}.`);
+    
+        console.log(`[WebfleetService] Found ${results.length} filtered historical data points for object ${objectuid}.`);
         return results;
     }
 }

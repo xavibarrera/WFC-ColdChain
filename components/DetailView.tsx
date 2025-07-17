@@ -69,56 +69,136 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
   const [isGeneratingDoorReport, setIsGeneratingDoorReport] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  console.log('[DetailView] Historical data received:', data);
+  const { sensorIds, sensorInfo, doorSensorIds } = useMemo(() => {
+    const tempIds = new Set<string>();
+    const tempInfo = new Map<string, string>();
+    const doorIds = new Set<string>();
+
+    // Scan all data points to find every sensor that has at least one record.
+    data.forEach(point => {
+        if (point.temperatures) {
+            for (const id in point.temperatures) {
+                // Check hasOwnProperty to be safe, though keys from API should be fine.
+                if (Object.prototype.hasOwnProperty.call(point.temperatures, id)) {
+                    if (!tempIds.has(id)) {
+                        tempIds.add(id);
+                        tempInfo.set(id, point.temperatures[parseInt(id, 10)].name);
+                    }
+                }
+            }
+        }
+        if (point.doorStatus) {
+            for (const id in point.doorStatus) {
+                 if (Object.prototype.hasOwnProperty.call(point.doorStatus, id)) {
+                    doorIds.add(id);
+                 }
+            }
+        }
+    });
+
+    return {
+        sensorIds: Array.from(tempIds).sort((a,b) => parseInt(a) - parseInt(b)),
+        sensorInfo: tempInfo,
+        doorSensorIds: Array.from(doorIds).sort((a,b) => parseInt(a) - parseInt(b)),
+    };
+  }, [data]);
+  
+  useEffect(() => {
+    if (!isLoading && data.length > 0) {
+        const tempSensorCounts: { [id: string]: number } = {};
+        const doorSensorCounts: { [id: string]: number } = {};
+
+        data.forEach(point => {
+            if (point.temperatures) {
+                Object.keys(point.temperatures).forEach(id => {
+                    tempSensorCounts[id] = (tempSensorCounts[id] || 0) + 1;
+                });
+            }
+            if (point.doorStatus) {
+                Object.keys(point.doorStatus).forEach(id => {
+                    doorSensorCounts[id] = (doorSensorCounts[id] || 0) + 1;
+                });
+            }
+        });
+        
+        const tempSensorIdsFound = Object.keys(tempSensorCounts).sort((a, b) => parseInt(a) - parseInt(b));
+        const doorSensorIdsFound = Object.keys(doorSensorCounts).sort((a, b) => parseInt(a) - parseInt(b));
+
+        console.log(`[Detail View] Data analysis for range "${rangeOptions.find(o => o.value === rangePattern)?.label}":`);
+
+        if (tempSensorIdsFound.length > 0) {
+            console.log(`Found ${tempSensorIdsFound.length} temperature sensor(s) with data.`);
+            tempSensorIdsFound.forEach(id => {
+                const name = sensorInfo.get(id) || `Sensor ${id}`;
+                console.log(`  - Sensor '${name}' (ID: ${id}): ${tempSensorCounts[id]} records`);
+            });
+        } else {
+            console.log("No temperature sensor data found for this period.");
+        }
+
+        if (doorSensorIdsFound.length > 0) {
+            console.log(`Found ${doorSensorIdsFound.length} door sensor(s) with data.`);
+            doorSensorIdsFound.forEach(id => {
+                console.log(`  - Door Sensor (ID: ${id}): ${doorSensorCounts[id]} records`);
+            });
+        } else {
+            console.log("No door sensor data found for this period.");
+        }
+    } else if (!isLoading) {
+        console.log(`[Detail View] No historical data found for range "${rangeOptions.find(o => o.value === rangePattern)?.label}".`);
+    }
+  }, [data, sensorInfo, rangePattern, isLoading]);
 
   const doorEvents = useMemo(() => {
     if (!data || data.length === 0) return [];
 
     const events: HistoricalDataPoint[] = [];
-    let lastKnownStatus: number | null = null;
+    let lastKnownStatuses: { [id: number]: 0 | 1 } | null = null;
 
     for (const point of data) {
-        if (point.doorStatus !== null && point.doorStatus !== lastKnownStatus) {
+        const currentStatuses = point.doorStatus;
+        if (currentStatuses && Object.keys(currentStatuses).length > 0) {
+            const hasChanged = !lastKnownStatuses || 
+                Object.keys(currentStatuses).some(id => currentStatuses[parseInt(id)] !== lastKnownStatuses?.[parseInt(id)]) ||
+                Object.keys(lastKnownStatuses || {}).length !== Object.keys(currentStatuses).length;
+
+            if (hasChanged) {
+                events.push(point);
+                lastKnownStatuses = { ...(lastKnownStatuses || {}), ...currentStatuses };
+            }
+        } else if (lastKnownStatuses) { // from having status to not having it
             events.push(point);
-            lastKnownStatus = point.doorStatus;
-        } else if (point.doorStatus === null && lastKnownStatus !== null) {
-            events.push(point);
-            lastKnownStatus = null;
+            lastKnownStatuses = null;
         }
     }
     
-    console.log('[DetailView] Calculated door events for report:', events);
     return events;
   }, [data]);
 
   const hasDoorStatusData = useMemo(() => {
-    return data.some(point => point.doorStatus !== null);
-  }, [data]);
+    return doorSensorIds.length > 0;
+  }, [doorSensorIds]);
+  
+  const hasTemperatureData = useMemo(() => {
+      return sensorIds.length > 0;
+  }, [sensorIds]);
 
   const handleRangeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setRangePattern(e.target.value);
   };
 
-  const getDoorStatusText = (status: number | null) => {
-      if (status === null) return 'N/A';
-      return status === 1 ? 'Open' : 'Closed';
-  }
-
   const handleGenerateDoorReport = async () => {
     let eventsToReport: HistoricalDataPoint[] = doorEvents;
     
     if (doorEvents.length === 0 && hasDoorStatusData) {
-        const firstEvent = data.find(p => p.doorStatus !== null);
+        const firstEvent = data.find(p => p.doorStatus && Object.keys(p.doorStatus).length > 0);
         if (firstEvent) {
             eventsToReport = [firstEvent];
         }
     }
 
-    console.log('[DetailView] handleGenerateDoorReport triggered. Events to report count:', eventsToReport.length);
-
     if (eventsToReport.length === 0) {
         setError("No door status data found in this period.");
-        console.warn('[DetailView] No door data to generate report.');
         return;
     }
 
@@ -143,16 +223,33 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
         doc.text(`Vehicle: ${vehicle.name}`, 14, 32);
         doc.text(`Date Range: ${rangeLabel}`, 14, 38);
 
-        const tableColumn = ["Timestamp", "Door Status", "Temperature", "Location"];
-        const tableRows = eventsToReport.map(item => [
-            new Date(item.timestamp).toLocaleString(),
-            getDoorStatusText(item.doorStatus),
-            item.temperature !== null ? `${item.temperature.toFixed(1)}°C` : 'N/A',
-            item.location ? item.location.address : 'N/A',
-        ]);
+        const tableHead: string[] = ["Timestamp"];
+        doorSensorIds.forEach(id => tableHead.push(`Door D${id}`));
+        if (hasTemperatureData) {
+            sensorIds.forEach(id => tableHead.push(`${sensorInfo.get(id) || `Sensor ${id}`} (°C)`));
+        }
+        tableHead.push("Location");
+
+        const tableRows = eventsToReport.map(item => {
+            const row: string[] = [
+                new Date(item.timestamp).toLocaleString(),
+            ];
+            doorSensorIds.forEach(id => {
+                const status = item.doorStatus?.[parseInt(id, 10)];
+                row.push(status === 1 ? 'Open' : (status === 0 ? 'Closed' : 'N/A'));
+            });
+            if (hasTemperatureData) {
+                sensorIds.forEach(id => {
+                    const temp = item.temperatures?.[parseInt(id, 10)];
+                    row.push(typeof temp?.value === 'number' ? temp.value.toFixed(1) : 'N/A');
+                });
+            }
+            row.push(item.location ? item.location.address : 'N/A');
+            return row;
+        });
 
         doc.autoTable({
-            head: [tableColumn],
+            head: [tableHead],
             body: tableRows,
             startY: 48,
             theme: 'grid',
@@ -169,13 +266,26 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
 
 
   const handleGenerateThermographTicket = async () => {
-    const tempDataPoints = data.filter(p => p.temperature !== null);
-    if (tempDataPoints.length === 0) {
-        setError("No temperature data available to generate a ticket.");
-        return;
-    }
     if (typeof jspdf === 'undefined' || typeof jspdf.jsPDF === 'undefined' || typeof (new jspdf.jsPDF()).autoTable === 'undefined') {
         setError('PDF generation library is not loaded.');
+        return;
+    }
+
+    const ticketSensorInfo = new Map<string, string>();
+    const tempDataPoints = data.filter(p => {
+        if (p.temperatures && Object.keys(p.temperatures).length > 0) {
+            Object.entries(p.temperatures).forEach(([id, reading]) => {
+                if (!ticketSensorInfo.has(id)) {
+                    ticketSensorInfo.set(id, reading.name);
+                }
+            });
+            return true;
+        }
+        return false;
+    });
+
+    if (tempDataPoints.length === 0) {
+        setError("No temperature data available to generate a ticket.");
         return;
     }
 
@@ -186,6 +296,8 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
         const { jsPDF } = jspdf;
         const doc = new jsPDF();
         
+        const ticketSensorIds = Array.from(ticketSensorInfo.keys()).sort((a,b)=> parseInt(a)-parseInt(b));
+
         const formatDateForTicketHeader = (ts: number) => {
             const d = new Date(ts);
             const yyyy = d.getFullYear();
@@ -193,7 +305,7 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
             const dd = String(d.getDate()).padStart(2, '0');
             const hh = String(d.getHours()).padStart(2, '0');
             const min = String(d.getMinutes()).padStart(2, '0');
-            return `${yyyy}-${mm}-${dd} ${hh}:${min} (UTC+02)`;
+            return `${yyyy}-${mm}-${dd} ${hh}:${min}`;
         };
 
         let lastDate = '';
@@ -210,44 +322,51 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
                 dateString = `${currentDate} ${dateString}`;
                 lastDate = currentDate;
             }
-            const temp = point.temperature!.toFixed(1);
-            return [(index + 1).toString() + '.', dateString, temp, temp];
+            
+            const row: any[] = [
+                { content: (index + 1).toString() + '.', styles: { halign: 'right', cellWidth: 12 } },
+                { content: dateString, styles: { halign: 'center' } }
+            ];
+            ticketSensorIds.forEach(id => {
+                const temp = point.temperatures?.[parseInt(id, 10)];
+                row.push({ 
+                    content: typeof temp?.value === 'number' ? temp.value.toFixed(1) : '-',
+                    styles: { halign: 'center' }
+                });
+            });
+            return row;
         });
 
         const totalPagesExp = '{total_pages_count_string}';
         
+        const tableHead = [['#', 'Timestamp']];
+        ticketSensorIds.forEach(id => tableHead[0].push(`${ticketSensorInfo.get(id) || `Sensor ${id}`} (°C)`));
+
         doc.autoTable({
-            head: [['Núm.', 'Fecha y hora', 'Sonda 1 (°C)', 'Sonda 2 (°C)']],
+            head: tableHead,
             body: tableRows,
             theme: 'plain',
             styles: { font: 'courier', fontSize: 9, cellPadding: 0.8 },
-            headStyles: { halign: 'left', valign: 'middle', fontStyle: 'normal', lineWidth: { bottom: 0.2 }, lineColor: [0, 0, 0], fillColor: [255, 255, 255], textColor: [0, 0, 0] },
-            columnStyles: {
-                0: { halign: 'right', cellWidth: 15 },
-                2: { halign: 'right' },
-                3: { halign: 'right' },
-            },
+            headStyles: { halign: 'center', valign: 'middle', fontStyle: 'normal', lineWidth: { bottom: 0.2 }, lineColor: [0, 0, 0], fillColor: [255, 255, 255], textColor: [0, 0, 0] },
             margin: { top: 65, bottom: 25 },
             didDrawPage: function (data: any) {
                 // Header
                 doc.setFont('courier', 'bold');
                 doc.setFontSize(16);
-                doc.text('Ticket Termógrafo Apache', data.settings.margin.left, 20);
+                doc.text('Thermograph Report', data.settings.margin.left, 20);
                 doc.setFont('courier', 'normal');
                 doc.setFontSize(10);
-                const generationDate = new Date().toLocaleString('sv-SE').replace('T', ' ') + ' (UTC+02)';
-                doc.text(`Fecha generación: ${generationDate}`, data.settings.margin.left, 28);
-                doc.text(`Termógrafo:    ${vehicle.uid}`, data.settings.margin.left, 34);
-                doc.text(`Matrícula:     ${vehicle.name}`, data.settings.margin.left, 38);
-                doc.text(`Empresa/CIF:`, data.settings.margin.left, 42);
+                const generationDate = new Date().toLocaleString('sv-SE').replace('T', ' ');
+                doc.text(`Generated on:    ${generationDate}`, data.settings.margin.left, 28);
+                doc.text(`Vehicle:         ${vehicle.name}`, data.settings.margin.left, 38);
+                doc.text(`Company:         `, data.settings.margin.left, 42);
                 const startStr = formatDateForTicketHeader(tempDataPoints[0].timestamp);
                 const endStr = formatDateForTicketHeader(tempDataPoints[tempDataPoints.length - 1].timestamp);
-                doc.text(`Ticket desde el ${startStr} hasta el ${endStr}`, data.settings.margin.left, 52);
+                doc.text(`Report Period:   from ${startStr} to ${endStr}`, data.settings.margin.left, 52);
                 
                 // Footer
                 doc.setFontSize(9);
-                doc.text(`Pág. ${data.pageNumber} de ${totalPagesExp}`, data.settings.margin.left, doc.internal.pageSize.height - 15);
-                doc.text('Ticket generado desde termógrafo homologado Apache - www.termografoapache.com', data.settings.margin.left, doc.internal.pageSize.height - 10);
+                doc.text(`Page ${data.pageNumber} of ${totalPagesExp}`, data.settings.margin.left, doc.internal.pageSize.height - 15);
             },
         });
         
@@ -255,10 +374,10 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
             doc.putTotalPages(totalPagesExp);
         }
 
-        doc.save(`thermograph-ticket-${vehicle.name.replace(/\s/g, '_')}-${rangePattern}.pdf`);
+        doc.save(`thermograph-report-${vehicle.name.replace(/\s/g, '_')}-${rangePattern}.pdf`);
 
     } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to generate ticket.');
+        setError(err instanceof Error ? err.message : 'Failed to generate report.');
     } finally {
         setIsGeneratingTicket(false);
     }
@@ -298,16 +417,39 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
         doc.addImage(imgData, 'PNG', 14, 48, imgWidth, imgHeight);
 
         if (data.length > 0) {
-            const tableColumn = ["Timestamp", "Temperature (°C)", "Door Status", "Location"];
-            const tableRows = data.map(item => [
-                new Date(item.timestamp).toLocaleString(),
-                item.temperature !== null ? item.temperature.toFixed(1) : 'N/A',
-                getDoorStatusText(item.doorStatus),
-                item.location ? item.location.address : 'N/A',
-            ]);
+            const tableHead: string[] = ["Timestamp"];
+            if (hasTemperatureData) {
+                sensorIds.forEach(id => tableHead.push(`${sensorInfo.get(id) || `Temp S${id}`} (°C)`));
+            }
+            if (hasDoorStatusData) {
+                doorSensorIds.forEach(id => tableHead.push(`Door D${id}`));
+            }
+            tableHead.push("Location");
+
+            const tableRows = data.map(item => {
+                const row: string[] = [
+                    new Date(item.timestamp).toLocaleString(),
+                ];
+                if (hasTemperatureData) {
+                    sensorIds.forEach(id => {
+                        const temp = item.temperatures?.[parseInt(id, 10)];
+                        row.push(typeof temp?.value === 'number' ? temp.value.toFixed(1) : 'N/A');
+                    });
+                }
+                if (hasDoorStatusData) {
+                    doorSensorIds.forEach(id => {
+                        const status = item.doorStatus?.[parseInt(id, 10)];
+                        row.push(status === 1 ? 'Open' : (status === 0 ? 'Closed' : 'N/A'));
+                    });
+                }
+                row.push(
+                    item.location ? item.location.address : 'N/A'
+                );
+                return row;
+            });
 
             doc.autoTable({
-                head: [tableColumn],
+                head: [tableHead],
                 body: tableRows,
                 startY: imgHeight + 60,
                 theme: 'grid',
@@ -363,12 +505,12 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
                 <RangeSelector selectedRange={rangePattern} onRangeChange={handleRangeChange} />
                 <button
                     onClick={handleGenerateThermographTicket}
-                    disabled={isGeneratingTicket || isLoading || data.filter(p => p.temperature !== null).length === 0}
+                    disabled={isGeneratingTicket || isLoading || !hasTemperatureData}
                     className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                     aria-label="Generate Thermograph Ticket"
                 >
                     {isGeneratingTicket ? <PdfSpinner/> : <IconTicket className="h-5 w-5" />}
-                    {isGeneratingTicket ? 'Generating...' : 'Thermograph Ticket'}
+                    {isGeneratingTicket ? 'Generating...' : 'Thermograph Report'}
                 </button>
                 <button
                     onClick={handleGenerateDoorReport}
@@ -392,7 +534,7 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
           </div>
            {error && <p className="text-red-500 text-center mb-4 bg-red-100 p-3 rounded-md">{error}</p>}
           <div id="datagraph-container" className="h-96">
-            {isLoading ? <Spinner /> : <DataGraph data={data} />}
+            {isLoading ? <Spinner /> : <DataGraph data={data} sensorIds={sensorIds} doorSensorIds={doorSensorIds} sensorInfo={sensorInfo} />}
           </div>
           {data.length > 0 && !isLoading && (
             <div className="mt-8">
@@ -404,12 +546,16 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
                       <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                         Timestamp
                       </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                        Temperature
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                        Door Status
-                      </th>
+                      {hasTemperatureData && sensorIds.map(id => (
+                          <th key={`temp-th-${id}`} scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            {sensorInfo.get(id) || `Temp S${id}`} (°C)
+                          </th>
+                      ))}
+                      {hasDoorStatusData && doorSensorIds.map(id => (
+                          <th key={`door-th-${id}`} scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            Door D{id}
+                          </th>
+                      ))}
                       <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                         Location
                       </th>
@@ -421,12 +567,26 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {new Date(point.timestamp).toLocaleString()}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {point.temperature !== null ? `${point.temperature.toFixed(1)}°C` : 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {getDoorStatusText(point.doorStatus)}
-                        </td>
+                        {hasTemperatureData && sensorIds.map(id => (
+                            <td key={`temp-td-${id}`} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {point.temperatures?.[parseInt(id, 10)] != null 
+                                    ? `${point.temperatures[parseInt(id, 10)].value.toFixed(1)}` 
+                                    : 'N/A'
+                                }
+                            </td>
+                        ))}
+                        {hasDoorStatusData && doorSensorIds.map(id => (
+                          <td key={`door-td-${id}`} className="px-6 py-4 whitespace-nowrap text-sm">
+                              {
+                                  (() => {
+                                      const status = point.doorStatus?.[parseInt(id, 10)];
+                                      if (status === 1) return <span className="font-semibold text-red-600">Open</span>;
+                                      if (status === 0) return <span className="font-semibold text-green-600">Closed</span>;
+                                      return <span className="text-gray-500">N/A</span>;
+                                  })()
+                              }
+                          </td>
+                        ))}
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {point.location ? point.location.address : 'N/A'}
                         </td>
