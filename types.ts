@@ -39,3 +39,12 @@ export interface HistoricalDataPoint {
     address: string;
   } | null;
 }
+
+export interface Trip {
+  startTime: number;
+  endTime: number;
+  startAddress: string;
+  endAddress: string;
+  distance: number;
+  duration: number; // in seconds
+}

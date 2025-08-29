@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { AuthCredentials } from '../types';
 import WebfleetService from '../services/webfleetService';
 
@@ -17,6 +17,23 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rememberMe, setRememberMe] = useState(false);
+
+  useEffect(() => {
+    const remembered = localStorage.getItem('rememberedCredentials');
+    if (remembered) {
+      try {
+        const { apiKey, accountName, username } = JSON.parse(remembered);
+        setApiKey(apiKey || '');
+        setAccountName(accountName || '');
+        setUsername(username || '');
+        setRememberMe(true);
+      } catch (e) {
+        console.error("Failed to parse remembered credentials", e);
+        localStorage.removeItem('rememberedCredentials');
+      }
+    }
+  }, []);
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,13 +49,19 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
     
     try {
       const authenticatedCredentials = await WebfleetService.login(credentials);
+      if (rememberMe) {
+        // Do not store the password
+        localStorage.setItem('rememberedCredentials', JSON.stringify({ apiKey, accountName, username }));
+      } else {
+        localStorage.removeItem('rememberedCredentials');
+      }
       onLogin(authenticatedCredentials);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed. Please check your credentials.');
     } finally {
       setIsLoading(false);
     }
-  }, [apiKey, accountName, username, password, onLogin]);
+  }, [apiKey, accountName, username, password, onLogin, rememberMe]);
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
@@ -101,6 +124,20 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                 placeholder="Password" 
               />
             </div>
+          </div>
+
+          <div className="flex items-center">
+            <input
+              id="remember-me"
+              name="remember-me"
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
+            />
+            <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
+              Remember me
+            </label>
           </div>
           
           {error && <p className="text-sm text-red-500 text-center">{error}</p>}

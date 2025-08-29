@@ -1,7 +1,13 @@
-
-import { AuthCredentials, Vehicle, DoorStatus, HistoricalDataPoint, TemperatureReading } from '../types';
+import { AuthCredentials, Vehicle, DoorStatus, HistoricalDataPoint, TemperatureReading, Trip } from '../types';
 
 const API_BASE_URL = 'https://csv.webfleet.com/extern';
+
+export interface HistoricalDataOptions {
+    objectuid: string;
+    rangePattern?: string;
+    startTime?: number;
+    endTime?: number;
+}
 
 class WebfleetService {
     private static async apiRequest(action: string, params: Record<string, any>, auth: AuthCredentials): Promise<any> {
@@ -61,6 +67,41 @@ class WebfleetService {
             console.error("Failed to parse JSON from API response:", responseText);
             throw new Error("Received an invalid or malformed response from the server.");
         }
+    }
+
+    private static async getChunkedHistoricalData(
+        auth: AuthCredentials,
+        action: string,
+        baseParams: Record<string, any>,
+        startTime: number,
+        endTime: number,
+        maxDurationMs: number
+    ): Promise<any[]> {
+        let allData: any[] = [];
+        let currentStartTime = startTime;
+
+        while (currentStartTime < endTime) {
+            const currentEndTime = Math.min(currentStartTime + maxDurationMs, endTime);
+            
+            const params = {
+                ...baseParams,
+                rangefrom_string: new Date(currentStartTime).toISOString(),
+                rangeto_string: new Date(currentEndTime).toISOString(),
+                range_pattern: 'ud'
+            };
+
+            try {
+                const chunkData = await this.apiRequest(action, params, auth);
+                if (chunkData) {
+                    allData = allData.concat(Array.isArray(chunkData) ? chunkData : [chunkData]);
+                }
+            } catch (error) {
+                console.error(`Error fetching chunk for ${action} from ${new Date(currentStartTime)} to ${new Date(currentEndTime)}:`, error);
+            }
+
+            currentStartTime = currentEndTime;
+        }
+        return allData;
     }
 
     public static async login(credentials: AuthCredentials): Promise<AuthCredentials> {
@@ -241,33 +282,72 @@ class WebfleetService {
         return processedData;
     }
 
-    public static async getHistoricalData(
+    public static async getTrips(
         auth: AuthCredentials,
         objectuid: string,
         rangePattern: string
-    ): Promise<HistoricalDataPoint[]> {
-        if (!auth.apiKey) throw new Error("API Key is required to fetch historical data.");
-    
+    ): Promise<Trip[]> {
+        if (!auth.apiKey) throw new Error("API Key is required to fetch trip data.");
+
         const params = {
             objectuid,
             range_pattern: rangePattern,
         };
+        
+        const tripDataResponse = await this.apiRequest('showTripReportExtern', params, auth);
+
+        const tripData = Array.isArray(tripDataResponse) ? tripDataResponse : (tripDataResponse ? [tripDataResponse] : []);
+
+        if (!tripData || tripData.length === 0) {
+            return [];
+        }
+
+        return tripData.map((item: any): Trip => ({
+            startTime: new Date(item.start_time).getTime(),
+            endTime: new Date(item.end_time).getTime(),
+            startAddress: item.start_addr || 'Address not available',
+            endAddress: item.end_addr || 'Address not available',
+            distance: item.distance,
+            duration: item.duration,
+        }));
+    }
+
+    public static async getHistoricalData(
+        auth: AuthCredentials,
+        options: HistoricalDataOptions
+    ): Promise<HistoricalDataPoint[]> {
+        if (!auth.apiKey) throw new Error("API Key is required to fetch historical data.");
+    
+        const { objectuid, rangePattern, startTime, endTime } = options;
+    
+        const baseParams: Record<string, any> = { objectuid };
+        let tempPromise, doorPromise, trackPromise;
+        const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+        const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
+    
+        if (rangePattern) {
+            const params = { ...baseParams, range_pattern: rangePattern };
+            tempPromise = this.apiRequest('getHistoricalTemperatureData', params, auth).catch(() => []);
+            doorPromise = this.apiRequest('getHistoricalRefrigeratedDoorStatusData', params, auth).catch(() => []);
+            trackPromise = this.apiRequest('showTracks', params, auth).catch(() => []);
+        } else if (startTime && endTime) {
+            tempPromise = this.getChunkedHistoricalData(auth, 'getHistoricalTemperatureData', baseParams, startTime, endTime, SEVEN_DAYS_MS);
+            doorPromise = this.getChunkedHistoricalData(auth, 'getHistoricalRefrigeratedDoorStatusData', baseParams, startTime, endTime, SEVEN_DAYS_MS);
+            trackPromise = this.getChunkedHistoricalData(auth, 'showTracks', baseParams, startTime, endTime, TWO_DAYS_MS);
+        } else {
+            throw new Error("Either rangePattern or startTime/endTime must be provided.");
+        }
     
         const [rawTempData, rawDoorData, trackData] = await Promise.all([
-            this.apiRequest('getHistoricalTemperatureData', params, auth).catch(() => []),
-            this.apiRequest('getHistoricalRefrigeratedDoorStatusData', params, auth).catch(() => []),
-            this.apiRequest('showTrack', params, auth).catch(() => [])
+            tempPromise,
+            doorPromise,
+            trackPromise
         ]);
     
-        //console.log('[WebfleetService] Raw Historical Temperature Data from API:', JSON.stringify(rawTempData, null, 2));
-        //console.log('[WebfleetService] Raw Historical Door Status Data from API:', JSON.stringify(rawDoorData, null, 2));
-        //console.log('[WebfleetService] Raw Historical Track Data from API:', JSON.stringify(trackData, null, 2));
-        
         // Normalize sensor identifier property from 'sensorcode' (hex string) to 'sensor' (number)
         const normalizeSensorData = (data: any[]) => {
             if (!Array.isArray(data)) return [];
             return data.map(d => {
-                // The historical API returns 'sensorcode' (hex), but the app expects 'sensor' (number).
                 if (d.sensorcode && typeof d.sensor === 'undefined') {
                     const numericId = parseInt(d.sensorcode, 16);
                     if (!isNaN(numericId)) {
@@ -297,7 +377,6 @@ class WebfleetService {
             return dataByTs.get(ts)!;
         };
     
-        // Process temperature data
         if (Array.isArray(tempData)) {
             tempData.forEach(d => {
                 const ts = new Date(d.timestamp).getTime();
@@ -312,7 +391,6 @@ class WebfleetService {
             });
         }
     
-        // Process door data
         if (Array.isArray(doorData)) {
             doorData.forEach(d => {
                 const ts = new Date(d.timestamp).getTime();
@@ -326,14 +404,16 @@ class WebfleetService {
     
         if (Array.isArray(trackData)) {
             trackData.forEach((d: any) => {
-                const ts = d.recordtime ? new Date(d.recordtime).getTime() : null;
-                if (ts && !isNaN(ts) && typeof d.latitude_mdeg === 'number') {
-                    const point = getOrCreatePoint(ts);
-                    point.location = {
-                        lat: d.latitude_mdeg / 1000000,
-                        lng: d.longitude_mdeg / 1000000,
-                        address: d.postext || 'Address not available',
-                    };
+                const ts = d.pos_time ? new Date(d.pos_time).getTime() : null;
+                if (ts && !isNaN(ts) && (typeof d.latitude === 'number' || typeof d.longitude === 'number')) {
+                     const point = getOrCreatePoint(ts);
+                     if (!point.location) {
+                        point.location = {
+                            lat: d.latitude / 1000000,
+                            lng: d.longitude / 1000000,
+                            address: d.postext || 'Address not available',
+                        };
+                     }
                 }
             });
         }
@@ -356,10 +436,8 @@ class WebfleetService {
             const combinedDoorStatus = { ...(lastDoor || {}), ...(point.doorStatus || {}) };
             const doorChanged = JSON.stringify(combinedDoorStatus) !== JSON.stringify(lastDoor);
             
-            // An event is the first point, a temp reading, or a door status change.
-            if (results.length === 0 || hasTemp || doorChanged) {
+            if (results.length === 0 || hasTemp || doorChanged || point.location) {
                 
-                // Add a synthetic point before a time gap to ensure graph continuity.
                 if (results.length > 0) {
                     const prevTimestamp = results[results.length - 1].timestamp;
                     if (timestamp > prevTimestamp + 1) {
@@ -383,15 +461,9 @@ class WebfleetService {
                     location: currentLocation,
                 });
                 
-                // Update last known states for the next iteration.
                 lastDoor = currentDoor;
                 carriedTemps = currentTemps;
                 lastLocation = currentLocation;
-
-            } else if (point.location) {
-                // If not a primary event, just update location.
-                // This attaches the most recent location to the next primary event.
-                lastLocation = point.location;
             }
         }
     
