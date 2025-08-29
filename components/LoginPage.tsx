@@ -64,28 +64,31 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   }, [apiKey, accountName, username, password, onLogin, rememberMe]);
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
+    <div 
+      className="flex items-center justify-center min-h-screen bg-cover bg-center"
+      style={{ backgroundImage: "url('https://lh3.googleusercontent.com/p/AF1QipMXRp5PIoFZ5TWVYe9vY98uNrrL33dIiEGyd91N=s680-w680-h510-rw')" }}
+    >
       <div className="w-full max-w-lg p-10 space-y-8 bg-white rounded-2xl shadow-lg">
         <div className="text-center">
-            <h1 className="text-3xl font-bold text-gray-900">
-                WEBFLEET COLD CHAIN
+            <img src="https://media.webfleet.com/f_auto,q_auto/branding/wf/wf.svg" alt="Webfleet Logo" className="h-12 mx-auto mb-4" />
+            <h1 className="text-3xl font-bold text-gray-900 p-2">
+                COLD CHAIN MONITOR
             </h1>
-            <p className="mt-2 text-sm text-gray-600">Sign in to monitor your assets.</p>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          <div>
+            <input 
+              id="api-key" 
+              name="api-key" 
+              type="password" 
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              required 
+              className="appearance-none rounded-md relative block w-full px-3 py-2 border border-login-input bg-login-input text-black placeholder-gray-800 focus:outline-none focus:ring-red-500 focus:border-red-500 focus:z-10 sm:text-sm" 
+              placeholder="API Key" 
+            />
+          </div>
           <div className="rounded-md shadow-sm -space-y-px">
-            <div>
-              <input 
-                id="api-key" 
-                name="api-key" 
-                type="password" 
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                required 
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 rounded-t-md focus:outline-none focus:ring-red-500 focus:border-red-500 focus:z-10 sm:text-sm" 
-                placeholder="API Key" 
-              />
-            </div>
              <div>
               <input 
                 id="account-name" 
@@ -94,7 +97,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                 value={accountName}
                 onChange={(e) => setAccountName(e.target.value)}
                 required 
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 focus:outline-none focus:ring-red-500 focus:border-red-500 focus:z-10 sm:text-sm" 
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-login-input bg-login-input text-black placeholder-gray-800 rounded-t-md focus:outline-none focus:ring-red-500 focus:border-red-500 focus:z-10 sm:text-sm" 
                 placeholder="Account Name" 
               />
             </div>
@@ -107,7 +110,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                 onChange={(e) => setUsername(e.target.value)}
                 autoComplete="username" 
                 required 
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 focus:outline-none focus:ring-red-500 focus:border-red-500 focus:z-10 sm:text-sm" 
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-login-input bg-login-input text-black placeholder-gray-800 focus:outline-none focus:ring-red-500 focus:border-red-500 focus:z-10 sm:text-sm" 
                 placeholder="Username" 
               />
             </div>
@@ -120,7 +123,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password" 
                 required 
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 rounded-b-md focus:outline-none focus:ring-red-500 focus:border-red-500 focus:z-10 sm:text-sm" 
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-login-input bg-login-input text-black placeholder-gray-800 rounded-b-md focus:outline-none focus:ring-red-500 focus:border-red-500 focus:z-10 sm:text-sm" 
                 placeholder="Password" 
               />
             </div>

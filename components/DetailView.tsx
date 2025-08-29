@@ -452,7 +452,7 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
           <span className="material-icons" style={{ fontSize: '20px' }}>arrow_back</span>
           Back to Dashboard
         </button>
-        <div className="bg-white rounded-lg shadow-lg p-6">
+        <div className="bg-app-content rounded-lg shadow-lg p-6">
           <div className="flex justify-between items-start mb-6 flex-wrap gap-4">
             <div>
               <h2 className="text-2xl font-bold text-gray-900">{vehicle.name}</h2>
@@ -463,7 +463,7 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
                 <button
                     onClick={handleGenerateThermographTicket}
                     disabled={isGeneratingTicket || isLoading || !hasTemperatureData}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-button-report hover:bg-button-report-hover rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                     aria-label="Generate Thermograph Ticket"
                 >
                     {isGeneratingTicket ? <PdfSpinner/> : <IconTicket className="h-5 w-5" />}
@@ -472,7 +472,7 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
                 <button
                     onClick={handleGenerateDoorReport}
                     disabled={isGeneratingDoorReport || isLoading || !hasDoorStatusData}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-button-report hover:bg-button-report-hover rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                     aria-label="Generate Door Status Report"
                 >
                     {isGeneratingDoorReport ? <PdfSpinner/> : <IconDocumentReport className="h-5 w-5" />}
@@ -481,7 +481,7 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
                 <button
                     onClick={handleDownloadPdf}
                     disabled={isDownloading || isLoading || data.length === 0}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-button-pdf hover:bg-button-pdf-hover rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                     aria-label="Download Full Report as PDF"
                 >
                     {isDownloading ? <PdfSpinner/> : <IconDownload className="h-5 w-5" />}
@@ -523,7 +523,7 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
                     <div className="h-96"><Spinner /></div>
                 ) : activeTab === 'overview' ? (
                     <>
-                        <div id="datagraph-container" className="h-96">
+                        <div id="datagraph-container" className="h-96 bg-white rounded-lg shadow p-4">
                            <DataGraph data={data} sensorIds={sensorIds} doorSensorIds={doorSensorIds} sensorInfo={sensorInfo} />
                         </div>
                         {data.length > 0 && (
@@ -531,7 +531,7 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
                             <h3 className="text-xl font-bold text-gray-900 mb-4">Historical Data Log</h3>
                             <div className="overflow-auto max-h-96 relative border border-gray-200 rounded-lg">
                               <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-100 sticky top-0 z-10">
+                                <thead className="bg-app-content sticky top-0 z-10">
                                   <tr>
                                     <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                                       Timestamp
@@ -553,7 +553,7 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
                                   {data.map((point, index) => (
-                                    <tr key={`${point.timestamp}-${index}`}>
+                                    <tr key={`${point.timestamp}-${index}`} className="row-hover transition-colors">
                                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                         {new Date(point.timestamp).toLocaleString()}
                                       </td>
@@ -642,7 +642,7 @@ const TripMapUpdater: React.FC<{ bounds: L.LatLngBoundsExpression }> = ({ bounds
 
 const TripMap: React.FC<TripMapProps> = ({ positions }) => {
     if (positions.length === 0) {
-        return <div className="h-full flex items-center justify-center text-gray-500 bg-gray-50 rounded-md">No location data for this trip.</div>;
+        return <div className="h-full flex items-center justify-center text-gray-500 bg-white rounded-md">No location data for this trip.</div>;
     }
 
     const startPoint = positions[0];
@@ -763,7 +763,7 @@ const TripReport: React.FC<TripReportProps> = ({ trips, auth, vehicleUid, sensor
                 return (
                     <div key={trip.startTime} className="border border-gray-200 rounded-lg overflow-hidden">
                         <div
-                            className="p-4 cursor-pointer flex justify-between items-center bg-gray-50 hover:bg-gray-100 transition-colors"
+                            className="p-4 cursor-pointer flex justify-between items-center bg-app-content row-hover transition-colors"
                             onClick={() => toggleTrip(trip)}
                             aria-expanded={isExpanded}
                         >
@@ -805,7 +805,7 @@ const TripReport: React.FC<TripReportProps> = ({ trips, auth, vehicleUid, sensor
                                             {Object.keys(tripDetails.stats).length > 0 ? (
                                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                                     {Object.keys(tripDetails.stats).map(sensorId => (
-                                                        <div key={sensorId} className="bg-gray-50 p-3 rounded-md border border-gray-200">
+                                                        <div key={sensorId} className="bg-white p-3 rounded-md border border-gray-200">
                                                             <p className="font-semibold text-gray-800">{sensorInfo.get(sensorId) || `Sensor ${sensorId}`}</p>
                                                             <div className="flex justify-between text-sm text-gray-600 mt-1">
                                                                 <span>Min: <strong className="text-blue-600">{tripDetails.stats[sensorId].min.toFixed(1)}°C</strong></span>
@@ -823,7 +823,7 @@ const TripReport: React.FC<TripReportProps> = ({ trips, auth, vehicleUid, sensor
                                         {expandedTripData && expandedTripData.length > 0 && (
                                             <div>
                                                 <h4 className="text-md font-semibold text-gray-800 mb-3">Trip Graph</h4>
-                                                <div className="h-72">
+                                                <div className="h-72 bg-white rounded-lg shadow p-4">
                                                     <DataGraph
                                                         data={expandedTripData}
                                                         sensorIds={tripDetails.tripSensorIds}
@@ -836,7 +836,7 @@ const TripReport: React.FC<TripReportProps> = ({ trips, auth, vehicleUid, sensor
 
                                         <div>
                                             <h4 className="text-md font-semibold text-gray-800 mb-3">Trip Map</h4>
-                                            <div className="h-80">
+                                            <div className="h-80 bg-white rounded-lg shadow overflow-hidden">
                                                 <TripMap positions={tripDetails.tripPositions} />
                                             </div>
                                         </div>

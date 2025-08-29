@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback } from 'react';
 import { AuthCredentials, Vehicle } from './types';
 import LoginPage from './components/LoginPage';
@@ -60,22 +59,29 @@ const App: React.FC = () => {
   return (
     <div className="flex flex-col h-screen bg-gray-100">
       {auth && (
-        <header className="bg-black text-white shadow-md">
+        <header className="bg-white text-gray-800 shadow-md">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-20">
-              <h1 className="text-2xl font-bold">WEBFLEET COLD CHAIN</h1>
-              <button
-                onClick={handleLogout}
-                className="flex items-center text-white hover:text-red-500 transition-colors duration-300"
-              >
-                <span className="material-icons mr-2">logout</span>
-                Logout
-              </button>
+            <div className="grid grid-cols-3 items-center h-20">
+              <div className="flex items-center">
+                <img src="https://media.webfleet.com/f_auto,q_auto/branding/wf/wf.svg" alt="Webfleet Logo" className="h-8 mr-4" />
+              </div>
+              <div className="text-center">
+                <h1 className="text-2xl font-bold">COLD CHAIN</h1>
+              </div>
+              <div className="flex justify-end">
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center text-gray-800 hover:text-red-500 transition-colors duration-300"
+                >
+                  <span className="material-icons mr-2">logout</span>
+                  Logout
+                </button>
+              </div>
             </div>
           </div>
         </header>
       )}
-      <main className="flex-grow flex flex-col min-h-0">
+      <main className={`flex-grow flex flex-col min-h-0 ${currentView === 'detail' ? 'bg-vehicles-header' : ''}`}>
         {renderContent()}
       </main>
     </div>

@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { AuthCredentials, Vehicle } from '../types';
 import WebfleetService from '../services/webfleetService';
@@ -75,7 +76,7 @@ const MainView: React.FC<MainViewProps> = ({ auth, onSelectVehicle }) => {
   return (
     <div className="flex-grow flex flex-col md:flex-row overflow-hidden">
       <div className="w-full md:w-2/5 flex flex-col bg-white h-1/2 md:h-full">
-        <div className="p-4 border-b">
+        <div className="p-4 border-b bg-vehicles-header text-white">
           <h2 className="text-lg font-bold">Vehicles</h2>
         </div>
         <div className="flex-grow overflow-y-auto">

@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Vehicle, DoorStatus, TemperatureReading } from '../types';
 
@@ -46,7 +45,7 @@ const DoorDisplay: React.FC<{ statuses: { [id: number]: DoorStatus } | null }> =
 };
 
 const VehicleTableHeader: React.FC = () => (
-    <div className="p-4 flex items-center justify-between border-b-2 border-gray-200 bg-gray-50 text-xs font-semibold text-gray-600 uppercase tracking-wider sticky top-0 z-10">
+    <div className="p-4 flex items-center justify-between border-b-2 border-gray-200 bg-app-content text-xs font-semibold text-gray-600 uppercase tracking-wider sticky top-0 z-10">
         <div className="flex-1">
             <span>Vehicle</span>
         </div>
@@ -71,9 +70,8 @@ const VehicleTable: React.FC<VehicleTableProps> = ({ vehicles, onRowClick, selec
               onClick={() => onRowClick(vehicle)}
               onMouseEnter={() => onVehicleHover(vehicle.uid)}
               onMouseLeave={() => onVehicleHover(null)}
-              className={`p-4 flex items-center justify-between cursor-pointer transition-colors duration-300 ${
-                selectedVehicleId === vehicle.uid ? 'bg-red-50' : 'hover:bg-red-50'
-              }`}
+              className="p-4 flex items-center justify-between cursor-pointer transition-colors duration-300 row-hover"
+              style={selectedVehicleId === vehicle.uid ? { backgroundColor: '#e9f4c1' } : undefined}
             >
               <div className="flex-1">
                 <p className="font-semibold text-lg text-gray-800">{vehicle.name}</p>
