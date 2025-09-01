@@ -463,7 +463,7 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
                 <button
                     onClick={handleGenerateThermographTicket}
                     disabled={isGeneratingTicket || isLoading || !hasTemperatureData}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-button-report hover:bg-button-report-hover rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-report-button bg-button-report hover:bg-button-report-hover rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                     aria-label="Generate Thermograph Ticket"
                 >
                     {isGeneratingTicket ? <PdfSpinner/> : <IconTicket className="h-5 w-5" />}
@@ -472,7 +472,7 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
                 <button
                     onClick={handleGenerateDoorReport}
                     disabled={isGeneratingDoorReport || isLoading || !hasDoorStatusData}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-button-report hover:bg-button-report-hover rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-report-button bg-button-report hover:bg-button-report-hover rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                     aria-label="Generate Door Status Report"
                 >
                     {isGeneratingDoorReport ? <PdfSpinner/> : <IconDocumentReport className="h-5 w-5" />}
@@ -497,7 +497,7 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
                         onClick={() => setActiveTab('overview')}
                         className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${
                             activeTab === 'overview'
-                            ? 'border-red-500 text-red-600'
+                            ? 'border-vehicles-header text-vehicles-header'
                             : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                         }`}
                         aria-current={activeTab === 'overview' ? 'page' : undefined}
@@ -508,7 +508,7 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
                         onClick={() => setActiveTab('trips')}
                         className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${
                             activeTab === 'trips'
-                            ? 'border-red-500 text-red-600'
+                            ? 'border-vehicles-header text-vehicles-header'
                             : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                         }`}
                         aria-current={activeTab === 'trips' ? 'page' : undefined}
@@ -551,9 +551,9 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
                                     </th>
                                   </tr>
                                 </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
+                                <tbody className="">
                                   {data.map((point, index) => (
-                                    <tr key={`${point.timestamp}-${index}`} className="row-hover transition-colors">
+                                    <tr key={`${point.timestamp}-${index}`} className={`row-hover transition-colors ${index % 2 !== 0 ? 'row-odd-bg' : 'bg-white'}`}>
                                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                         {new Date(point.timestamp).toLocaleString()}
                                       </td>
@@ -708,7 +708,7 @@ const TripReport: React.FC<TripReportProps> = ({ trips, auth, vehicleUid, sensor
 
     return (
         <div className="space-y-3">
-            {trips.map((trip) => {
+            {trips.map((trip, index) => {
                 const isExpanded = expandedTripId === trip.startTime;
 
                 let tripDetails: {
@@ -763,7 +763,7 @@ const TripReport: React.FC<TripReportProps> = ({ trips, auth, vehicleUid, sensor
                 return (
                     <div key={trip.startTime} className="border border-gray-200 rounded-lg overflow-hidden">
                         <div
-                            className="p-4 cursor-pointer flex justify-between items-center bg-app-content row-hover transition-colors"
+                            className={`p-4 cursor-pointer flex justify-between items-center row-hover transition-colors ${index % 2 !== 0 ? 'row-odd-bg' : 'bg-white'}`}
                             onClick={() => toggleTrip(trip)}
                             aria-expanded={isExpanded}
                         >

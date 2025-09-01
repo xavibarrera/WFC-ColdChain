@@ -1,9 +1,9 @@
 {
-  "homepage": "https://xavibarrera.github.io/WFC-ColdChain/",
   "name": "webfleet-cold-chain-monitor",
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "homepage": "https://xavibarrera.github.io/WFC-ColdChain/",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

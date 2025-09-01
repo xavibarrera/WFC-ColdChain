@@ -61,8 +61,8 @@ const VehicleTable: React.FC<VehicleTableProps> = ({ vehicles, onRowClick, selec
   return (
     <>
       <VehicleTableHeader />
-      <ul className="divide-y divide-gray-200">
-        {vehicles.map((vehicle) => {
+      <ul>
+        {vehicles.map((vehicle, index) => {
           return (
             <li
               id={`vehicle-row-${vehicle.uid}`}
@@ -70,7 +70,7 @@ const VehicleTable: React.FC<VehicleTableProps> = ({ vehicles, onRowClick, selec
               onClick={() => onRowClick(vehicle)}
               onMouseEnter={() => onVehicleHover(vehicle.uid)}
               onMouseLeave={() => onVehicleHover(null)}
-              className="p-4 flex items-center justify-between cursor-pointer transition-colors duration-300 row-hover"
+              className={`p-4 flex items-center justify-between cursor-pointer transition-colors duration-300 row-hover ${index % 2 !== 0 ? 'row-odd-bg' : 'bg-white'}`}
               style={selectedVehicleId === vehicle.uid ? { backgroundColor: '#e9f4c1' } : undefined}
             >
               <div className="flex-1">
