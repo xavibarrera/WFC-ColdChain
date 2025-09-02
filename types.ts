@@ -16,6 +16,19 @@ export interface TemperatureReading {
   name: string;
 }
 
+export interface TemperatureAlert {
+  eventid: string;
+  objectuid: string;
+  msgtext: string;
+  eventtime: string;
+  eventlevel: string;
+  location?: {
+    lat: number;
+    lng: number;
+    address: string;
+  };
+}
+
 export interface Vehicle {
   uid: string;
   name: string;
@@ -27,6 +40,7 @@ export interface Vehicle {
     lng: number;
     address: string;
   } | null;
+  alerts?: TemperatureAlert[];
 }
 
 export interface HistoricalDataPoint {

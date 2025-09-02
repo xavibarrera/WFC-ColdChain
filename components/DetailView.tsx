@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { AuthCredentials, Vehicle, HistoricalDataPoint, Trip } from '../types';
+import { AuthCredentials, Vehicle, HistoricalDataPoint, Trip, TemperatureAlert } from '../types';
 import WebfleetService from '../services/webfleetService';
 import DataGraph from './DataGraph';
 import { IconDownload, IconTicket, IconDocumentReport } from '../constants';
@@ -66,12 +67,13 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
   const [rangePattern, setRangePattern] = useState('d0'); // Default to 'Today'
   const [data, setData] = useState<HistoricalDataPoint[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
+  const [events, setEvents] = useState<TemperatureAlert[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isGeneratingTicket, setIsGeneratingTicket] = useState(false);
   const [isGeneratingDoorReport, setIsGeneratingDoorReport] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'trips'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'trips' | 'events'>('overview');
 
   const { sensorIds, sensorInfo, doorSensorIds } = useMemo(() => {
     const tempIds = new Set<string>();
@@ -423,16 +425,19 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
     try {
       setIsLoading(true);
       setError(null);
-      const [historicalResult, tripsResult] = await Promise.all([
+      const [historicalResult, tripsResult, eventsResult] = await Promise.all([
           WebfleetService.getHistoricalData(auth, { objectuid: vehicle.uid, rangePattern }),
-          WebfleetService.getTrips(auth, vehicle.uid, rangePattern)
+          WebfleetService.getTrips(auth, vehicle.uid, rangePattern),
+          WebfleetService.getVehicleEvents(auth, vehicle.uid, rangePattern)
       ]);
       setData(historicalResult);
       setTrips(tripsResult.sort((a, b) => b.startTime - a.startTime));
+      setEvents(eventsResult);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch historical data.');
       setData([]);
       setTrips([]);
+      setEvents([]);
     } finally {
       setIsLoading(false);
     }
@@ -515,6 +520,17 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
                     >
                         Trip Report
                     </button>
+                    <button
+                        onClick={() => setActiveTab('events')}
+                        className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${
+                            activeTab === 'events'
+                            ? 'border-vehicles-header text-vehicles-header'
+                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        }`}
+                        aria-current={activeTab === 'events' ? 'page' : undefined}
+                    >
+                        Events
+                    </button>
                 </nav>
             </div>
             
@@ -588,7 +604,7 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
                           </div>
                         )}
                     </>
-                ) : (
+                ) : activeTab === 'trips' ? (
                     <>
                         {error && <p className="text-red-500 text-center mb-4 bg-red-100 p-3 rounded-md">{error}</p>}
                         <TripReport 
@@ -598,6 +614,12 @@ const DetailView: React.FC<DetailViewProps> = ({ auth, vehicle, onBack }) => {
                             sensorInfo={sensorInfo} 
                         />
                     </>
+                ) : (
+                  <EventsReport 
+                    events={events}
+                    auth={auth}
+                    vehicleUid={vehicle.uid}
+                  />
                 )}
             </div>
         </div>
@@ -625,12 +647,15 @@ const createTripMarkerIcon = (color: string) => {
 
 const startIcon = createTripMarkerIcon("#22C55E"); // green-500
 const endIcon = createTripMarkerIcon("#EF4444"); // red-500
+const eventIcon = createTripMarkerIcon("#F59E0B"); // amber-500
 
-interface TripMapProps {
+interface MapWithTraceProps {
     positions: [number, number][];
+    eventLocation?: { lat: number; lng: number; };
+    bounds?: L.LatLngBoundsExpression;
 }
 
-const TripMapUpdater: React.FC<{ bounds: L.LatLngBoundsExpression }> = ({ bounds }) => {
+const MapWithTraceUpdater: React.FC<{ bounds: L.LatLngBoundsExpression }> = ({ bounds }) => {
     const map = useMap();
     useEffect(() => {
         if (bounds && Array.isArray(bounds) && bounds.length > 0) {
@@ -640,27 +665,134 @@ const TripMapUpdater: React.FC<{ bounds: L.LatLngBoundsExpression }> = ({ bounds
     return null;
 }
 
-const TripMap: React.FC<TripMapProps> = ({ positions }) => {
-    if (positions.length === 0) {
-        return <div className="h-full flex items-center justify-center text-gray-500 bg-white rounded-md">No location data for this trip.</div>;
+const MapWithTrace: React.FC<MapWithTraceProps> = ({ positions, eventLocation, bounds }) => {
+    if (positions.length === 0 && !eventLocation) {
+        return <div className="h-full flex items-center justify-center text-gray-500 bg-white rounded-md">No location data for this event.</div>;
     }
-
-    const startPoint = positions[0];
-    const endPoint = positions[positions.length - 1];
+    
+    const mapBounds = bounds || positions;
+    // FIX: Changed center to use LatLngLiteral to avoid TypeScript inference issues with LatLngTuple.
+    const center = positions.length > 0 ? { lat: positions[0][0], lng: positions[0][1] } : { lat: eventLocation!.lat, lng: eventLocation!.lng };
 
     return (
-        <MapContainer center={startPoint} zoom={13} scrollWheelZoom={true} style={{ height: '100%', width: '100%', borderRadius: '8px' }}>
-            <TripMapUpdater bounds={positions} />
+        <MapContainer center={center} zoom={13} scrollWheelZoom={true} style={{ height: '100%', width: '100%', borderRadius: '8px' }}>
+            <MapWithTraceUpdater bounds={mapBounds} />
             <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
-            <Polyline pathOptions={{ color: 'blue' }} positions={positions} />
-            <Marker position={startPoint} icon={startIcon} />
-            <Marker position={endPoint} icon={endIcon} />
+            {positions.length > 0 && <Polyline pathOptions={{ color: 'blue' }} positions={positions} />}
+            {positions.length > 0 && <Marker position={positions[0]} icon={startIcon} />}
+            {positions.length > 0 && <Marker position={positions[positions.length - 1]} icon={endIcon} />}
+            {eventLocation && <Marker position={[eventLocation.lat, eventLocation.lng]} icon={eventIcon} />}
         </MapContainer>
     );
 };
+
+interface EventsReportProps {
+  events: TemperatureAlert[];
+  auth: AuthCredentials;
+  vehicleUid: string;
+}
+
+const EventsReport: React.FC<EventsReportProps> = ({ events, auth, vehicleUid }) => {
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
+  const [expandedEventTrace, setExpandedEventTrace] = useState<HistoricalDataPoint[] | null>(null);
+  const [isTraceLoading, setIsTraceLoading] = useState(false);
+  const [traceError, setTraceError] = useState<string | null>(null);
+
+  const toggleEvent = useCallback(async (event: TemperatureAlert) => {
+    if (expandedEventId === event.eventid) {
+      setExpandedEventId(null);
+      setExpandedEventTrace(null);
+    } else {
+      setExpandedEventId(event.eventid);
+      setIsTraceLoading(true);
+      setTraceError(null);
+      setExpandedEventTrace(null);
+      try {
+        const eventTime = new Date(event.eventtime).getTime();
+        const startTime = eventTime - 5 * 60 * 1000;
+        const endTime = eventTime + 5 * 60 * 1000;
+        
+        const data = await WebfleetService.getHistoricalData(auth, {
+          objectuid: vehicleUid,
+          startTime,
+          endTime
+        });
+        setExpandedEventTrace(data);
+      } catch (error) {
+        console.error("Failed to fetch event trace:", error);
+        setTraceError(error instanceof Error ? error.message : "Could not load event trace.");
+        setExpandedEventTrace([]);
+      } finally {
+        setIsTraceLoading(false);
+      }
+    }
+  }, [auth, vehicleUid, expandedEventId]);
+
+  if (events.length === 0) {
+      return <div className="text-center text-gray-500 py-8">No temperature events found for this period.</div>;
+  }
+
+  return (
+      <div className="space-y-3">
+          {events.map((event, index) => {
+              const isExpanded = expandedEventId === event.eventid;
+              const tracePositions = isExpanded && expandedEventTrace ? expandedEventTrace.map(p => p.location ? [p.location.lat, p.location.lng] as [number, number] : null).filter((p): p is [number, number] => p !== null) : [];
+
+              return (
+                  <div key={event.eventid} className="border border-gray-200 rounded-lg overflow-hidden">
+                      <div
+                          className={`p-4 cursor-pointer flex justify-between items-center row-hover transition-colors ${index % 2 !== 0 ? 'row-odd-bg' : 'bg-white'}`}
+                          onClick={() => toggleEvent(event)}
+                          aria-expanded={isExpanded}
+                      >
+                          <div className="flex-1">
+                              <p className="font-semibold text-gray-800">{event.msgtext}</p>
+                              <p className="text-sm text-gray-600 mt-1">{new Date(event.eventtime).toLocaleString()}</p>
+                          </div>
+                          <div className="flex items-center gap-6 ml-4 text-right">
+                              <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${event.eventlevel.includes("Alarm") ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                  {event.eventlevel}
+                              </span>
+                              <span className={`material-icons text-gray-500 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
+                                  expand_more
+                              </span>
+                          </div>
+                      </div>
+                      {isExpanded && (
+                          <div className="p-4 border-t border-gray-200 bg-white">
+                              {isTraceLoading ? (
+                                  <div className="h-96 flex items-center justify-center"><Spinner /></div>
+                              ) : traceError ? (
+                                  <p className="text-red-500 text-center mb-4 bg-red-100 p-3 rounded-md">{traceError}</p>
+                              ) : (
+                                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                      <div>
+                                          <h4 className="text-md font-semibold text-gray-800 mb-3">Event Details</h4>
+                                          <div className="text-sm space-y-2 text-gray-700">
+                                              <p><strong className="font-medium text-gray-900">Time:</strong> {new Date(event.eventtime).toLocaleString()}</p>
+                                              <p><strong className="font-medium text-gray-900">Location:</strong> {event.location?.address || 'N/A'}</p>
+                                              <p><strong className="font-medium text-gray-900">Message:</strong> {event.msgtext}</p>
+                                          </div>
+                                      </div>
+                                      <div>
+                                          <h4 className="text-md font-semibold text-gray-800 mb-3">Vehicle Trace (10 min window)</h4>
+                                          <div className="h-72 bg-gray-100 rounded-lg shadow overflow-hidden">
+                                              <MapWithTrace positions={tracePositions} eventLocation={event.location} bounds={tracePositions} />
+                                          </div>
+                                      </div>
+                                  </div>
+                              )}
+                          </div>
+                      )}
+                  </div>
+              )
+          })}
+      </div>
+  );
+}
 
 
 const TripReport: React.FC<TripReportProps> = ({ trips, auth, vehicleUid, sensorInfo }) => {
@@ -837,7 +969,7 @@ const TripReport: React.FC<TripReportProps> = ({ trips, auth, vehicleUid, sensor
                                         <div>
                                             <h4 className="text-md font-semibold text-gray-800 mb-3">Trip Map</h4>
                                             <div className="h-80 bg-white rounded-lg shadow overflow-hidden">
-                                                <TripMap positions={tripDetails.tripPositions} />
+                                                <MapWithTrace positions={tripDetails.tripPositions} bounds={tripDetails.tripPositions} />
                                             </div>
                                         </div>
                                     </div>

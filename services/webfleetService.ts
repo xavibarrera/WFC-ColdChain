@@ -1,4 +1,5 @@
-import { AuthCredentials, Vehicle, DoorStatus, HistoricalDataPoint, TemperatureReading, Trip } from '../types';
+
+import { AuthCredentials, Vehicle, DoorStatus, HistoricalDataPoint, TemperatureReading, Trip, TemperatureAlert } from '../types';
 
 const API_BASE_URL = 'https://csv.webfleet.com/extern';
 
@@ -116,10 +117,11 @@ class WebfleetService {
     public static async getVehiclesAndAssets(auth: AuthCredentials): Promise<Vehicle[]> {
         if (!auth.apiKey) throw new Error("API Key is required to fetch vehicle data.");
 
-        const [vehicleData, tempData, doorData] = await Promise.all([
+        const [vehicleData, tempData, doorData, alertsMap] = await Promise.all([
             this.apiRequest('showObjectReportExtern', { objectclass: 'asset,vehicle' }, auth),
             this.apiRequest('getCurrentTemperatureData', {}, auth).catch(() => []),
             this.apiRequest('getCurrentRefrigeratedDoorStatusData', {}, auth).catch(() => []),
+            this.getTemperatureAlerts(auth),
         ]);
 
         if (!vehicleData || !Array.isArray(vehicleData)) {
@@ -225,8 +227,86 @@ class WebfleetService {
                         address: item.postext || 'Address not available',
                     }
                     : null,
+                alerts: alertsMap.get(item.objectuid),
             };
         });
+    }
+
+    public static async getTemperatureAlerts(auth: AuthCredentials): Promise<Map<string, TemperatureAlert[]>> {
+        const params = {
+            range_pattern: 'wf0',
+            resolved: '0',
+            acknowledged: '0',
+        };
+    
+        const rawEvents = await this.apiRequest('showEventReportExtern', params, auth).catch(() => []);
+        const events = Array.isArray(rawEvents) ? rawEvents : (rawEvents ? [rawEvents] : []);
+
+        const alertsByUid = new Map<string, TemperatureAlert[]>();
+    
+        if (events.length === 0) {
+            return alertsByUid;
+        }
+    
+        const tempEvents = events.filter(event => 
+            event.msgtext && typeof event.msgtext === 'string' && event.msgtext.toLowerCase().includes('temperature')
+        );
+    
+        for (const event of tempEvents) {
+            if (event.objectuid) {
+                if (!alertsByUid.has(event.objectuid)) {
+                    alertsByUid.set(event.objectuid, []);
+                }
+                alertsByUid.get(event.objectuid)!.push({
+                    eventid: event.eventid,
+                    objectuid: event.objectuid,
+                    msgtext: event.msgtext,
+                    eventtime: event.eventtime,
+                    eventlevel: event.eventlevel_cur,
+                    location: (event.latitude_mdeg && event.longitude_mdeg) ? {
+                        lat: event.latitude_mdeg / 1000000,
+                        lng: event.longitude_mdeg / 1000000,
+                        address: event.postext || 'Address not available',
+                    } : undefined,
+                });
+            }
+        }
+        return alertsByUid;
+    }
+
+    public static async getVehicleEvents(auth: AuthCredentials, objectuid: string, rangePattern: string): Promise<TemperatureAlert[]> {
+        const params = {
+            objectuid,
+            range_pattern: rangePattern,
+        };
+    
+        const rawEvents = await this.apiRequest('showEventReportExtern', params, auth).catch(() => []);
+        const events = Array.isArray(rawEvents) ? rawEvents : (rawEvents ? [rawEvents] : []);
+    
+        if (events.length === 0) {
+            return [];
+        }
+    
+        const tempEvents = events
+            .filter(event => 
+                event.msgtext && typeof event.msgtext === 'string' && event.msgtext.toLowerCase().includes('temperature')
+            )
+            .map((event: any): TemperatureAlert => ({
+                eventid: event.eventid,
+                objectuid: event.objectuid,
+                msgtext: event.msgtext,
+                eventtime: event.eventtime,
+                eventlevel: event.eventlevel_cur,
+                location: (event.latitude_mdeg && event.longitude_mdeg) ? {
+                    lat: event.latitude_mdeg / 1000000,
+                    lng: event.longitude_mdeg / 1000000,
+                    address: event.postext || 'Address not available',
+                } : undefined,
+            }));
+        
+        tempEvents.sort((a, b) => new Date(b.eventtime).getTime() - new Date(a.eventtime).getTime());
+    
+        return tempEvents;
     }
 
     private static assignStableIds(data: any[], valueKey: 'temperature' | 'status'): any[] {

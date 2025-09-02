@@ -30,11 +30,14 @@ const MainView: React.FC<MainViewProps> = ({ auth, onSelectVehicle }) => {
       setIsLoading(true);
       setError(null);
       const data = await WebfleetService.getVehiclesAndAssets(auth);
+
       const vehiclesWithSensors = data.filter(v => 
         (v.temperatures && Object.keys(v.temperatures).length > 0) || v.doorStatus !== null
       );
+      
       vehiclesWithSensors.sort((a, b) => a.name.localeCompare(b.name));
       setVehicles(vehiclesWithSensors);
+      
       const firstVehicleWithLocation = vehiclesWithSensors.find(v => v.location);
       if (firstVehicleWithLocation?.location) {
         setMapCenter([firstVehicleWithLocation.location.lat, firstVehicleWithLocation.location.lng]);
@@ -74,12 +77,12 @@ const MainView: React.FC<MainViewProps> = ({ auth, onSelectVehicle }) => {
   }
 
   return (
-    <div className="flex-grow flex flex-col md:flex-row overflow-hidden">
+    <div className="flex-grow flex flex-col md:flex-row">
       <div className="w-full md:w-2/5 flex flex-col bg-white h-1/2 md:h-full">
         <div className="p-4 border-b bg-vehicles-header text-white">
           <h2 className="text-lg font-bold">Vehicles</h2>
         </div>
-        <div className="flex-grow overflow-y-auto">
+        <div className="flex-grow">
           <VehicleTable 
             vehicles={vehicles} 
             onRowClick={handleRowClick}
